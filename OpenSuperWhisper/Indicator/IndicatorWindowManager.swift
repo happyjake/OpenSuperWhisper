@@ -5,10 +5,15 @@ import SwiftUI
 @MainActor
 class IndicatorWindowManager: IndicatorViewDelegate {
     static let shared = IndicatorWindowManager()
-    
+
     var window: NSWindow?
     var viewModel: IndicatorViewModel?
-    
+
+    /// Returns true if currently recording audio
+    var isRecording: Bool {
+        return viewModel?.state == .recording
+    }
+
     private init() {}
     
     func show(nearPoint point: NSPoint? = nil) -> IndicatorViewModel {

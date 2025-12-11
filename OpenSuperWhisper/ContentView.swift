@@ -147,9 +147,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack {
-            if !permissionsManager.isMicrophonePermissionGranted
-                || !permissionsManager.isAccessibilityPermissionGranted
-            {
+            if !permissionsManager.isMicrophonePermissionGranted {
                 PermissionsView(permissionsManager: permissionsManager)
             } else {
                 VStack(spacing: 0) {
@@ -423,13 +421,6 @@ struct PermissionsView: View {
                 action: {
                     permissionsManager.requestMicrophonePermissionOrOpenSystemPreferences()
                 }
-            )
-
-            PermissionRow(
-                isGranted: permissionsManager.isAccessibilityPermissionGranted,
-                title: "Accessibility Access",
-                description: "Required for global keyboard shortcuts",
-                action: { permissionsManager.openSystemPreferences(for: .accessibility) }
             )
 
             Spacer()

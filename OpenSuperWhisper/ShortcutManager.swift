@@ -7,7 +7,8 @@ import KeyboardShortcuts
 import SwiftUI
 
 extension KeyboardShortcuts.Name {
-    static let toggleRecord = Self("toggleRecord", default: .init(.backtick, modifiers: .option))
+    // Use Cmd+Shift+Space for macOS 15+ compatibility (Option-only shortcuts no longer work)
+    static let toggleRecord = Self("toggleRecord", default: .init(.space, modifiers: [.command, .shift]))
     static let escape = Self("escape", default: .init(.escape))
 }
 

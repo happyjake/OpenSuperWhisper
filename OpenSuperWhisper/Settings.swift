@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon
 import Combine
 import Foundation
@@ -86,7 +87,10 @@ class SettingsViewModel: ObservableObject {
             AppPreferences.shared.useAsianAutocorrect = useAsianAutocorrect
         }
     }
-    
+
+    @Published var isAccessibilityPermissionGranted: Bool = false
+    private var accessibilityCheckTimer: Timer?
+
     init() {
         let prefs = AppPreferences.shared
         self.selectedLanguage = prefs.whisperLanguage
@@ -106,8 +110,33 @@ class SettingsViewModel: ObservableObject {
             self.selectedModelURL = URL(fileURLWithPath: savedPath)
         }
         loadAvailableModels()
+        checkAccessibilityPermission()
+        startAccessibilityChecking()
     }
-    
+
+    deinit {
+        accessibilityCheckTimer?.invalidate()
+    }
+
+    private func startAccessibilityChecking() {
+        accessibilityCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.checkAccessibilityPermission()
+        }
+    }
+
+    func checkAccessibilityPermission() {
+        let granted = AXIsProcessTrusted()
+        DispatchQueue.main.async { [weak self] in
+            self?.isAccessibilityPermissionGranted = granted
+        }
+    }
+
+    func openAccessibilityPreferences() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     func loadAvailableModels() {
         availableModels = WhisperModelManager.shared.getAvailableModels()
         if selectedModelURL == nil {
@@ -574,6 +603,64 @@ struct SettingsView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
+                    }
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Accessibility Permission (Optional)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Accessibility (Optional)")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Image(systemName: viewModel.isAccessibilityPermissionGranted ? "checkmark.circle.fill" : "info.circle.fill")
+                                .foregroundColor(viewModel.isAccessibilityPermissionGranted ? .green : .blue)
+                            Text("Accessibility Access")
+                                .font(.subheadline)
+                            Spacer()
+                            if !viewModel.isAccessibilityPermissionGranted {
+                                Button("Grant Access") {
+                                    viewModel.openAccessibilityPreferences()
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+
+                        Text(viewModel.isAccessibilityPermissionGranted
+                            ? "Recording indicator will appear near your text cursor."
+                            : "Accessibility is optional. Without it, the recording indicator will appear near your mouse cursor instead of the text caret. Keyboard shortcuts work without this permission.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // URL Scheme for External Tools
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("External Tools (Hammerspoon, Alfred, etc.)")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Use these URL commands to trigger recording from external apps:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("opensuperwhisper://toggle").font(.system(.caption, design: .monospaced))
+                            Text("opensuperwhisper://start").font(.system(.caption, design: .monospaced))
+                            Text("opensuperwhisper://stop").font(.system(.caption, design: .monospaced))
+                            Text("opensuperwhisper://cancel").font(.system(.caption, design: .monospaced))
+                        }
+                        .foregroundColor(.primary)
                     }
                 }
                 .padding()

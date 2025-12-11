@@ -9,8 +9,19 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>OpenSuperWhisper needs microphone access to record audio for transcription.</string>
 	<key>NSAccessibilityUsageDescription</key>
-	<string>OpenSuperWhisper needs accessibility access to provide system-wide functionality.</string>
+	<string>OpenSuperWhisper needs accessibility access to position the recording indicator near your text cursor. This is optional - the app works without it.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>OpenSuperWhisper needs accessibility access to provide system-wide functionality.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.opensuperwhisper.url</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>opensuperwhisper</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

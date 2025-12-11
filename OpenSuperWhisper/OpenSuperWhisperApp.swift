@@ -26,6 +26,9 @@ struct OpenSuperWhisperApp: App {
             }
             .frame(width: 450, height: 650)
             .environmentObject(appState)
+            .onOpenURL { url in
+                handleURL(url)
+            }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 450, height: 650)
@@ -34,6 +37,44 @@ struct OpenSuperWhisperApp: App {
             CommandGroup(replacing: .newItem) {}
         }
         .handlesExternalEvents(matching: Set(arrayLiteral: "openMainWindow"))
+    }
+
+    /// Handle URL scheme commands: opensuperwhisper://start, stop, toggle, cancel
+    private func handleURL(_ url: URL) {
+        guard url.scheme == "opensuperwhisper" else { return }
+
+        Task { @MainActor in
+            switch url.host {
+            case "start-recording", "start":
+                if !IndicatorWindowManager.shared.isRecording {
+                    let point = NSEvent.mouseLocation
+                    let vm = IndicatorWindowManager.shared.show(nearPoint: point)
+                    vm.startRecording()
+                }
+
+            case "stop-recording", "stop":
+                IndicatorWindowManager.shared.stopRecording()
+
+            case "cancel-recording", "cancel":
+                IndicatorWindowManager.shared.stopForce()
+
+            case "toggle-recording", "toggle":
+                if IndicatorWindowManager.shared.isRecording {
+                    IndicatorWindowManager.shared.stopRecording()
+                } else {
+                    let point = NSEvent.mouseLocation
+                    let vm = IndicatorWindowManager.shared.show(nearPoint: point)
+                    vm.startRecording()
+                }
+
+            case "openMainWindow":
+                // Existing handler - open main window
+                break
+
+            default:
+                print("Unknown URL command: \(url.host ?? "nil")")
+            }
+        }
     }
 
     init() {
