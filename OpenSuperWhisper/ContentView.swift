@@ -262,7 +262,7 @@ struct ContentView: View {
                     .safeAreaInset(edge: .bottom) {
                         // Bottom bar with floating record button
                         VStack(spacing: 0) {
-                            // Floating record button with glass background
+                            // Floating record button with liquid glass background
                             Button(action: {
                                 if viewModel.isRecording {
                                     viewModel.startDecoding()
@@ -270,30 +270,44 @@ struct ContentView: View {
                                     viewModel.startRecording()
                                 }
                             }) {
-                                ZStack {
-                                    // Frosted glass background
-                                    Circle()
-                                        .fill(.ultraThinMaterial)
-                                        .frame(width: 80, height: 80)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                        )
-                                        .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
-
-                                    if viewModel.state == .decoding {
-                                        ProgressView()
-                                            .scaleEffect(1.0)
-                                            .frame(width: 64, height: 64)
-                                    } else {
-                                        MainRecordButton(isRecording: viewModel.isRecording)
-                                    }
+                                if viewModel.state == .decoding {
+                                    ProgressView()
+                                        .scaleEffect(1.0)
+                                        .frame(width: 64, height: 64)
+                                } else {
+                                    MainRecordButton(isRecording: viewModel.isRecording)
                                 }
                             }
                             .buttonStyle(.plain)
                             .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding)
-                            .shadow(color: .black.opacity(0.15), radius: 12, y: 6)
-                            .padding(.bottom, 8)
+                            .background {
+                                ZStack {
+                                    // Soft outer glow - very blurred
+                                    Circle()
+                                        .fill(Color.white.opacity(0.6))
+                                        .frame(width: 95, height: 95)
+                                        .blur(radius: 15)
+
+                                    // Glass body - soft gradient
+                                    Circle()
+                                        .fill(
+                                            RadialGradient(
+                                                colors: [
+                                                    Color.white.opacity(0.95),
+                                                    Color.white.opacity(0.85),
+                                                    Color(white: 0.92).opacity(0.9)
+                                                ],
+                                                center: .topLeading,
+                                                startRadius: 0,
+                                                endRadius: 80
+                                            )
+                                        )
+                                        .frame(width: 84, height: 84)
+                                        .blur(radius: 0.5)
+                                }
+                                .shadow(color: .black.opacity(0.12), radius: 20, y: 10)
+                            }
+                            .padding(.bottom, 20)
                             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isRecording)
                             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.state)
 
@@ -480,6 +494,14 @@ struct RecordingRow: View {
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(10)
         .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isHovered ? Color.gray.opacity(0.4) : Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showFullText = true
+        }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -498,17 +520,8 @@ struct RecordingRow: View {
             .font(.body)
             .foregroundColor(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .lineLimit(isHovered ? 6 : 3)
-            .textSelection(.enabled)
+            .lineLimit(3)
             .padding(8)
-            .contentShape(Rectangle())
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHovered ? Color(NSColor.selectedTextBackgroundColor).opacity(0.1) : .clear)
-            )
-            .onTapGesture {
-                showFullText = true
-            }
     }
 
     private var bottomBar: some View {
@@ -562,6 +575,7 @@ struct RecordingRow: View {
                 .opacity(isHovered ? 1.0 : 0.4)
                 .help("Delete")
             }
+            .onTapGesture { }  // Prevent tap from propagating to parent
         }
     }
 
