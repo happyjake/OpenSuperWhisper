@@ -26,9 +26,6 @@ struct OpenSuperWhisperApp: App {
             }
             .frame(width: 450, height: 650)
             .environmentObject(appState)
-            .onOpenURL { url in
-                handleURL(url)
-            }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 450, height: 650)
@@ -39,7 +36,51 @@ struct OpenSuperWhisperApp: App {
         .handlesExternalEvents(matching: Set(arrayLiteral: "openMainWindow"))
     }
 
-    /// Handle URL scheme commands: opensuperwhisper://start, stop, toggle, cancel
+    init() {
+        _ = ShortcutManager.shared
+        _ = MicrophoneService.shared
+        WhisperModelManager.shared.ensureDefaultModelPresent()
+    }
+}
+
+class AppState: ObservableObject {
+    @Published var hasCompletedOnboarding: Bool {
+        didSet {
+            AppPreferences.shared.hasCompletedOnboarding = hasCompletedOnboarding
+        }
+    }
+
+    init() {
+        self.hasCompletedOnboarding = AppPreferences.shared.hasCompletedOnboarding
+    }
+}
+
+class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    private var statusItem: NSStatusItem?
+    private var mainWindow: NSWindow?
+    private var microphoneService = MicrophoneService.shared
+    private var microphoneObserver: AnyCancellable?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+
+        setupStatusBarItem()
+
+        if let window = NSApplication.shared.windows.first {
+            self.mainWindow = window
+
+            window.delegate = self
+        }
+
+        observeMicrophoneChanges()
+    }
+
+    // Handle URL scheme - this works even when app is in background/menu bar only
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            handleURL(url)
+        }
+    }
+
     private func handleURL(_ url: URL) {
         guard url.scheme == "opensuperwhisper" else { return }
 
@@ -68,51 +109,12 @@ struct OpenSuperWhisperApp: App {
                 }
 
             case "openMainWindow":
-                // Existing handler - open main window
-                break
+                showMainWindow()
 
             default:
                 print("Unknown URL command: \(url.host ?? "nil")")
             }
         }
-    }
-
-    init() {
-        _ = ShortcutManager.shared
-        _ = MicrophoneService.shared
-        WhisperModelManager.shared.ensureDefaultModelPresent()
-    }
-}
-
-class AppState: ObservableObject {
-    @Published var hasCompletedOnboarding: Bool {
-        didSet {
-            AppPreferences.shared.hasCompletedOnboarding = hasCompletedOnboarding
-        }
-    }
-
-    init() {
-        self.hasCompletedOnboarding = AppPreferences.shared.hasCompletedOnboarding
-    }
-}
-
-class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
-    private var statusItem: NSStatusItem?
-    private var mainWindow: NSWindow?
-    private var microphoneService = MicrophoneService.shared
-    private var microphoneObserver: AnyCancellable?
-    
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        
-        setupStatusBarItem()
-        
-        if let window = NSApplication.shared.windows.first {
-            self.mainWindow = window
-            
-            window.delegate = self
-        }
-        
-        observeMicrophoneChanges()
     }
     
     private func observeMicrophoneChanges() {

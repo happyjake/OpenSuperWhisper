@@ -62,6 +62,9 @@ final class AppPreferences {
     
     @UserDefault(key: "playSoundOnRecordStart", defaultValue: false)
     var playSoundOnRecordStart: Bool
+
+    @UserDefault(key: "autoCopyToClipboard", defaultValue: true)
+    var autoCopyToClipboard: Bool
     
     @UserDefault(key: "hasCompletedOnboarding", defaultValue: false)
     var hasCompletedOnboarding: Bool

@@ -76,8 +76,14 @@ class IndicatorViewModel: ObservableObject {
                         ))
                     }
                     
-                    insertTextUsingPasteboard(text)
-                    print("Transcription result: \(text)")
+                    // Copy transcribed text to clipboard if enabled
+                    if AppPreferences.shared.autoCopyToClipboard {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                        print("Transcription result (copied to clipboard): \(text)")
+                    } else {
+                        print("Transcription result: \(text)")
+                    }
                 } catch {
                     print("Error transcribing audio: \(error)")
                     try? FileManager.default.removeItem(at: tempURL)

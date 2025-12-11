@@ -88,6 +88,12 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var autoCopyToClipboard: Bool {
+        didSet {
+            AppPreferences.shared.autoCopyToClipboard = autoCopyToClipboard
+        }
+    }
+
     @Published var isAccessibilityPermissionGranted: Bool = false
     private var accessibilityCheckTimer: Timer?
 
@@ -105,7 +111,8 @@ class SettingsViewModel: ObservableObject {
         self.debugMode = prefs.debugMode
         self.playSoundOnRecordStart = prefs.playSoundOnRecordStart
         self.useAsianAutocorrect = prefs.useAsianAutocorrect
-        
+        self.autoCopyToClipboard = prefs.autoCopyToClipboard
+
         if let savedPath = prefs.selectedModelPath {
             self.selectedModelURL = URL(fileURLWithPath: savedPath)
         }
@@ -566,13 +573,20 @@ struct SettingsView: View {
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                         .help("Play a notification sound when recording begins")
                         .padding(.top, 4)
+
+                        Toggle(isOn: $viewModel.autoCopyToClipboard) {
+                            Text("Copy transcription to clipboard")
+                                .font(.subheadline)
+                        }
+                        .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+                        .help("Automatically copy transcription to clipboard after recording")
                     }
                 }
                 .padding()
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 // Instructions
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Instructions")

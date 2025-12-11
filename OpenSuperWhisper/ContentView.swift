@@ -259,122 +259,111 @@ struct ContentView: View {
                     }
                     .animation(.spring(response: 0.3, dampingFraction: 0.8), value: filteredRecordings)
                     .animation(.spring(response: 0.3, dampingFraction: 0.8), value: searchText)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color(NSColor.windowBackgroundColor).opacity(1),
-                                        Color(NSColor.windowBackgroundColor).opacity(0)
-                                    ]),
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .frame(height: 20)
-                    }
+                    .safeAreaInset(edge: .bottom) {
+                        // Bottom bar with floating record button
+                        VStack(spacing: 0) {
+                            // Floating record button with glass background
+                            Button(action: {
+                                if viewModel.isRecording {
+                                    viewModel.startDecoding()
+                                } else {
+                                    viewModel.startRecording()
+                                }
+                            }) {
+                                ZStack {
+                                    // Frosted glass background
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .frame(width: 80, height: 80)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                        )
+                                        .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
 
-                    VStack(spacing: 16) {
-                        Button(action: {
-                            if viewModel.isRecording {
-                                viewModel.startDecoding()
-                            } else {
-                                viewModel.startRecording()
-                            }
-                        }) {
-                            if viewModel.state == .decoding {
-                                ProgressView()
-                                    .scaleEffect(1.0)
-                                    .frame(width: 48, height: 48)
-                                    .contentTransition(.symbolEffect(.replace))
-                            } else {
-                                MainRecordButton(isRecording: viewModel.isRecording)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding)
-                        .padding(.top, 24)
-                        .padding(.bottom, 16)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isRecording)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.state)
-
-                        // Нижняя панель с подсказкой и кнопками управления
-                        HStack(alignment: .bottom) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                // Подсказка о шорткате
-                                HStack(spacing: 6) {
-                                    if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
-                                        Text(shortcut.description)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                    if viewModel.state == .decoding {
+                                        ProgressView()
+                                            .scaleEffect(1.0)
+                                            .frame(width: 64, height: 64)
+                                    } else {
+                                        MainRecordButton(isRecording: viewModel.isRecording)
                                     }
-                                    Text("to show mini recorder")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
                                 }
-                                .padding(.leading, 4)
-
-                                // Подсказка о drag-n-drop
-                                HStack(spacing: 6) {
-                                    Image(systemName: "arrow.down.doc.fill")
-                                        .foregroundColor(.secondary)
-                                        .imageScale(.medium)
-                                    Text("Drop audio file here to transcribe")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.leading, 4)
                             }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding)
+                            .shadow(color: .black.opacity(0.15), radius: 12, y: 6)
+                            .padding(.bottom, 8)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isRecording)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.state)
 
-                            Spacer()
-
-                            HStack(spacing: 12) {
-                                MicrophonePickerIconView(microphoneService: viewModel.microphoneService)
-                                
-                                if !viewModel.recordingStore.recordings.isEmpty {
-                                    Button(action: {
-                                        showDeleteConfirmation = true
-                                    }) {
-                                        Image(systemName: "trash")
-                                            .font(.title3)
+                            // Minimal bottom bar
+                            HStack(alignment: .center) {
+                                // Left: shortcut hint (minimal)
+                                if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
+                                    HStack(spacing: 4) {
+                                        Text(shortcut.description)
+                                            .font(.caption2)
                                             .foregroundColor(.secondary)
-                                            .frame(width: 32, height: 32)
-                                            .background(Color.gray.opacity(0.1))
-                                            .cornerRadius(8)
+                                        Text("mini recorder")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary.opacity(0.6))
+                                    }
+                                }
+
+                                Spacer()
+
+                                // Right: controls
+                                HStack(spacing: 8) {
+                                    MicrophonePickerIconView(microphoneService: viewModel.microphoneService)
+
+                                    if !viewModel.recordingStore.recordings.isEmpty {
+                                        Button(action: {
+                                            showDeleteConfirmation = true
+                                        }) {
+                                            Image(systemName: "trash")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.secondary)
+                                                .frame(width: 28, height: 28)
+                                                .background(Color(NSColor.controlBackgroundColor))
+                                                .cornerRadius(6)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Delete all recordings")
+                                        .confirmationDialog(
+                                            "Delete All Recordings",
+                                            isPresented: $showDeleteConfirmation,
+                                            titleVisibility: .visible
+                                        ) {
+                                            Button("Delete All", role: .destructive) {
+                                                viewModel.recordingStore.deleteAllRecordings()
+                                            }
+                                            Button("Cancel", role: .cancel) {}
+                                        } message: {
+                                            Text("Are you sure you want to delete all recordings? This action cannot be undone.")
+                                        }
+                                        .interactiveDismissDisabled()
+                                    }
+
+                                    Button(action: {
+                                        isSettingsPresented.toggle()
+                                    }) {
+                                        Image(systemName: "gear")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.secondary)
+                                            .frame(width: 28, height: 28)
+                                            .background(Color(NSColor.controlBackgroundColor))
+                                            .cornerRadius(6)
                                     }
                                     .buttonStyle(.plain)
-                                    .help("Delete all recordings")
-                                    .confirmationDialog(
-                                        "Delete All Recordings",
-                                        isPresented: $showDeleteConfirmation,
-                                        titleVisibility: .visible
-                                    ) {
-                                        Button("Delete All", role: .destructive) {
-                                            viewModel.recordingStore.deleteAllRecordings()
-                                        }
-                                        Button("Cancel", role: .cancel) {}
-                                    } message: {
-                                        Text("Are you sure you want to delete all recordings? This action cannot be undone.")
-                                    }
-                                    .interactiveDismissDisabled()
+                                    .help("Settings")
                                 }
-                                
-                                Button(action: {
-                                    isSettingsPresented.toggle()
-                                }) {
-                                    Image(systemName: "gear")
-                                        .font(.title3)
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 32, height: 32)
-                                        .background(Color.gray.opacity(0.1))
-                                        .cornerRadius(8)
-                                }
-                                .buttonStyle(.plain)
-                                .help("Settings")
                             }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(.regularMaterial)
                         }
                     }
-                    .padding()
                 }
             }
         }
@@ -468,8 +457,9 @@ struct RecordingRow: View {
     let recording: Recording
     @StateObject private var audioRecorder = AudioRecorder.shared
     @StateObject private var recordingStore = RecordingStore.shared
-    @State private var showTranscription = false
     @State private var isHovered = false
+    @State private var showFullText = false
+    @State private var showCopyConfirmation = false
 
     private var isPlaying: Bool {
         audioRecorder.isPlaying && audioRecorder.currentlyPlayingURL == recording.url
@@ -477,137 +467,254 @@ struct RecordingRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TranscriptionView(
-                transcribedText: recording.transcription, isExpanded: $showTranscription
-            )
-            .padding(.horizontal, 4)
-            .padding(.top, 8)
+            // Transcription Area - Click to open full view
+            transcriptionArea
+                .padding(12)
 
-            Divider()
+            // Bottom Bar - Metadata + Actions
+            bottomBar
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
+                .background(Color(NSColor.separatorColor).opacity(0.08))
+        }
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        .padding(.vertical, 4)
+        .transition(.scale.combined(with: .opacity))
+        .sheet(isPresented: $showFullText) {
+            TranscriptionDetailView(recording: recording)
+        }
+    }
 
-            HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(recording.timestamp, style: .date)
-                        .font(.subheadline)
+    @ViewBuilder
+    private var transcriptionArea: some View {
+        Text(recording.transcription)
+            .font(.body)
+            .foregroundColor(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .lineLimit(isHovered ? 6 : 3)
+            .textSelection(.enabled)
+            .padding(8)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color(NSColor.selectedTextBackgroundColor).opacity(0.1) : .clear)
+            )
+            .onTapGesture {
+                showFullText = true
+            }
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 8) {
+            // Date/Time - Left aligned, subdued
+            VStack(alignment: .leading, spacing: 1) {
+                Text(recording.timestamp, style: .date)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(recording.timestamp, style: .time)
+                    .font(.caption2)
+                    .foregroundColor(.secondary.opacity(0.7))
+            }
+
+            Spacer()
+
+            // Action Buttons - Always visible, right aligned
+            HStack(spacing: 12) {
+                // Play/Stop Button
+                Button(action: togglePlayback) {
+                    Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(isPlaying ? .red : .secondary)
+                        .frame(width: 24, height: 24)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered || isPlaying ? 1.0 : 0.4)
+                .help(isPlaying ? "Stop" : "Play")
+
+                // Copy Button with confirmation
+                Button(action: copyToClipboard) {
+                    Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 14))
+                        .foregroundColor(showCopyConfirmation ? .green : .secondary)
+                        .frame(width: 24, height: 24)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1.0 : 0.4)
+                .help("Copy to clipboard")
+
+                // Delete Button
+                Button(action: deleteRecording) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
                         .foregroundColor(.secondary)
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1.0 : 0.4)
+                .help("Delete")
+            }
+        }
+    }
 
-                    Text(recording.timestamp, style: .time)
+    // MARK: - Actions
+
+    private func togglePlayback() {
+        if isPlaying {
+            audioRecorder.stopPlaying()
+        } else {
+            audioRecorder.playRecording(url: recording.url)
+        }
+    }
+
+    private func copyToClipboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(recording.transcription, forType: .string)
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showCopyConfirmation = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showCopyConfirmation = false
+            }
+        }
+    }
+
+    private func deleteRecording() {
+        if isPlaying {
+            audioRecorder.stopPlaying()
+        }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            recordingStore.deleteRecording(recording)
+        }
+    }
+}
+
+// MARK: - Full Transcription Detail View (Sheet)
+struct TranscriptionDetailView: View {
+    let recording: Recording
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var recordingStore = RecordingStore.shared
+    @State private var editableText: String = ""
+    @State private var isEditing = false
+    @State private var showCopyConfirmation = false
+    @FocusState private var isTextFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Transcription")
+                        .font(.headline)
+                    Text(recording.timestamp, format: .dateTime.month().day().year().hour().minute())
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Spacer()
 
-                HStack(spacing: 16) {
-                    if isHovered || isPlaying {
-                        Button(action: {
-                            if isPlaying {
-                                audioRecorder.stopPlaying()
-                            } else {
-                                audioRecorder.playRecording(url: recording.url)
-                            }
-                        }) {
-                            Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(isPlaying ? .red : .accentColor)
-                                .contentTransition(.symbolEffect(.replace))
-                        }
-                        .buttonStyle(.plain)
-
-                        Button(action: {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(
-                                recording.transcription, forType: .string
-                            )
-                        }) {
-                            Image(systemName: "doc.on.doc.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Copy entire text")
-
-                        Button(action: {
-                            if isPlaying {
-                                audioRecorder.stopPlaying()
-                            }
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                recordingStore.deleteRecording(recording)
-                            }
-                        }) {
-                            Image(systemName: "trash.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                HStack(spacing: 8) {
+                    // Copy button
+                    Button(action: copyToClipboard) {
+                        Image(systemName: showCopyConfirmation ? "checkmark.circle.fill" : "doc.on.doc")
+                            .foregroundColor(showCopyConfirmation ? .green : .secondary)
                     }
+                    .buttonStyle(.plain)
+                    .help("Copy to clipboard")
+
+                    // Edit/Done button
+                    if isEditing {
+                        Button("Done") {
+                            saveChanges()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    } else {
+                        Button("Edit") {
+                            editableText = recording.transcription
+                            isEditing = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isTextFocused = true
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    // Close button
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .transition(.opacity)
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
-            .background(Color(NSColor.controlBackgroundColor))
-        }
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovered = hovering
-            }
-        }
-        .padding(.vertical, 4)
-        .transition(.scale.combined(with: .opacity))
-    }
-}
+            .padding()
 
-struct TranscriptionView: View {
-    let transcribedText: String
-    @Binding var isExpanded: Bool
-    
-    private var hasMoreLines: Bool {
-        !transcribedText.isEmpty && transcribedText.count > 150
-    }
+            Divider()
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Group {
-                if isExpanded {
-                    TextEditor(text: .constant(transcribedText))
+            // Content
+            ScrollView {
+                if isEditing {
+                    TextEditor(text: $editableText)
                         .font(.body)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 100, maxHeight: 200)
-                        .scrollContentBackground(.hidden)
+                        .focused($isTextFocused)
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                        .padding()
+                        .onKeyPress(.escape) {
+                            isEditing = false
+                            return .handled
+                        }
                 } else {
-                    Text(transcribedText)
+                    Text(recording.transcription)
                         .font(.body)
-                        .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if hasMoreLines {
-                                isExpanded.toggle()
-                            }
-                        }
+                        .padding()
                 }
-            }
-            .padding(8)
-
-            if hasMoreLines {
-                Button(action: { isExpanded.toggle() }) {
-                    HStack(spacing: 4) {
-                        Text(isExpanded ? "Show less" : "Show more")
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    }
-                    .foregroundColor(.blue)
-                    .font(.footnote)
-                }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
             }
         }
+        .frame(minWidth: 500, minHeight: 400)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private func copyToClipboard() {
+        let textToCopy = isEditing ? editableText : recording.transcription
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(textToCopy, forType: .string)
+
+        withAnimation {
+            showCopyConfirmation = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation {
+                showCopyConfirmation = false
+            }
+        }
+    }
+
+    private func saveChanges() {
+        guard editableText != recording.transcription else {
+            isEditing = false
+            return
+        }
+
+        var updatedRecording = recording
+        updatedRecording.transcription = editableText
+        recordingStore.updateRecording(updatedRecording)
+        isEditing = false
     }
 }
 
@@ -697,47 +804,51 @@ struct MicrophonePickerIconView: View {
 
 struct MainRecordButton: View {
     let isRecording: Bool
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var buttonColor: Color {
-        colorScheme == .dark ? .white : .gray
-    }
 
     var body: some View {
-        Circle()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        isRecording ? Color.red.opacity(0.8) : buttonColor.opacity(0.8),
-                        isRecording ? Color.red : buttonColor.opacity(0.9)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 48, height: 48)
-            .shadow(
-                color: isRecording ? .red.opacity(0.5) : buttonColor.opacity(0.3),
-                radius: 12,
-                x: 0,
-                y: 0
-            )
-            .overlay {
+        ZStack {
+            // Background circle
+            Circle()
+                .fill(isRecording ? Color.red : Color.red.opacity(0.12))
+                .frame(width: 64, height: 64)
+
+            // Pulsing ring when recording
+            if isRecording {
                 Circle()
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                isRecording ? .red.opacity(0.6) : buttonColor.opacity(0.6),
-                                isRecording ? .red.opacity(0.3) : buttonColor.opacity(0.3)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
+                    .stroke(Color.red.opacity(0.5), lineWidth: 3)
+                    .frame(width: 64, height: 64)
+                    .scaleEffect(isRecording ? 1.3 : 1.0)
+                    .opacity(isRecording ? 0 : 1)
+                    .animation(
+                        .easeOut(duration: 1.0).repeatForever(autoreverses: false),
+                        value: isRecording
                     )
+            } else {
+                // Outer ring for idle state
+                Circle()
+                    .stroke(Color.red.opacity(0.3), lineWidth: 2)
+                    .frame(width: 64, height: 64)
             }
-            .scaleEffect(isRecording ? 0.9 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isRecording)
+
+            // Mic icon - always visible, with recording indicator
+            ZStack {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundColor(isRecording ? .white : .red)
+
+                // Small recording dot indicator
+                if isRecording {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 8, height: 8)
+                        .offset(x: 12, y: -12)
+                        .opacity(isRecording ? 1 : 0)
+                }
+            }
+        }
+        .shadow(color: isRecording ? .red.opacity(0.5) : .black.opacity(0.1), radius: isRecording ? 12 : 4)
+        .scaleEffect(isRecording ? 1.08 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isRecording)
     }
 }
 

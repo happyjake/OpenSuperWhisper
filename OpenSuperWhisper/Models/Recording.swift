@@ -5,7 +5,7 @@ struct Recording: Identifiable, Codable, FetchableRecord, PersistableRecord, Equ
     let id: UUID
     let timestamp: Date
     let fileName: String
-    let transcription: String
+    var transcription: String
     let duration: TimeInterval
 
     static func == (lhs: Recording, rhs: Recording) -> Bool {
@@ -131,6 +131,23 @@ class RecordingStore: ObservableObject {
     private nonisolated func deleteRecordingFromDB(_ recording: Recording) async throws {
         try await dbQueue.write { db in
             _ = try recording.delete(db)
+        }
+    }
+
+    func updateRecording(_ recording: Recording) {
+        Task {
+            do {
+                try await updateRecordingInDB(recording)
+                await loadRecordings()
+            } catch {
+                print("Failed to update recording: \(error)")
+            }
+        }
+    }
+
+    private nonisolated func updateRecordingInDB(_ recording: Recording) async throws {
+        try await dbQueue.write { db in
+            try recording.update(db)
         }
     }
 
