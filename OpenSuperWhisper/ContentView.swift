@@ -482,6 +482,7 @@ struct RecordingRow: View {
     @StateObject private var audioRecorder = AudioRecorder.shared
     @StateObject private var recordingStore = RecordingStore.shared
     @State private var isHovered = false
+    @State private var isExpanded = false
     @State private var showFullText = false
     @State private var showCopyConfirmation = false
 
@@ -489,27 +490,121 @@ struct RecordingRow: View {
         audioRecorder.isPlaying && audioRecorder.currentlyPlayingURL == recording.url
     }
 
+    private var wordCount: Int {
+        recording.transcription.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+    }
+
+    private var formattedDuration: String {
+        let minutes = Int(recording.duration) / 60
+        let seconds = Int(recording.duration) % 60
+        return "\(minutes):\(String(format: "%02d", seconds))"
+    }
+
+    private var formattedTime: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: recording.timestamp)
+    }
+
+    private var trimmedText: String {
+        recording.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Transcription Area - Click to open full view
-            transcriptionArea
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
-                .padding(.bottom, 6)
+        VStack(alignment: .leading, spacing: 12) {
+            // Transcription Area
+            VStack(alignment: .leading, spacing: 8) {
+                Text(trimmedText)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(isExpanded ? nil : 4)
+
+                // Read more / Read less button
+                if trimmedText.count > 150 {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isExpanded.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Text(isExpanded ? "Read less" : "Read more")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
 
             // Bottom Bar - Metadata + Actions
-            bottomBar
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(NSColor.separatorColor).opacity(0.08))
+            HStack(spacing: 0) {
+                // Left: Metadata
+                HStack(spacing: 6) {
+                    Text(formattedTime)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Text("•")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary.opacity(0.5))
+
+                    Text(formattedDuration)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Text("•")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary.opacity(0.5))
+
+                    Text("\(wordCount) words")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                // Right: Action Buttons
+                HStack(spacing: 16) {
+                    // Play/Stop Button
+                    Button(action: togglePlayback) {
+                        Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(isPlaying ? .red : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isPlaying ? "Stop" : "Play")
+
+                    // Copy Button
+                    Button(action: copyToClipboard) {
+                        Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(showCopyConfirmation ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy to clipboard")
+
+                    // Delete Button
+                    Button(action: deleteRecording) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
         .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(10)
-        .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isHovered ? Color.gray.opacity(0.4) : Color.gray.opacity(0.2), lineWidth: 1)
-        )
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
         .contentShape(Rectangle())
         .onTapGesture {
             showFullText = true
@@ -519,75 +614,8 @@ struct RecordingRow: View {
                 isHovered = hovering
             }
         }
-        .padding(.vertical, 4)
-        .transition(.scale.combined(with: .opacity))
         .sheet(isPresented: $showFullText) {
             TranscriptionDetailView(recording: recording)
-        }
-    }
-
-    @ViewBuilder
-    private var transcriptionArea: some View {
-        Text(recording.transcription.trimmingCharacters(in: .whitespacesAndNewlines))
-            .font(.body)
-            .foregroundColor(.primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .lineLimit(3)
-            .padding(8)
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 8) {
-            // Date/Time - Left aligned, subdued
-            VStack(alignment: .leading, spacing: 1) {
-                Text(recording.timestamp, style: .date)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(recording.timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.7))
-            }
-
-            Spacer()
-
-            // Action Buttons - Always visible, right aligned
-            HStack(spacing: 12) {
-                // Play/Stop Button
-                Button(action: togglePlayback) {
-                    Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(isPlaying ? .red : .secondary)
-                        .frame(width: 24, height: 24)
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .buttonStyle(.plain)
-                .opacity(isHovered || isPlaying ? 1.0 : 0.4)
-                .help(isPlaying ? "Stop" : "Play")
-
-                // Copy Button with confirmation
-                Button(action: copyToClipboard) {
-                    Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 14))
-                        .foregroundColor(showCopyConfirmation ? .green : .secondary)
-                        .frame(width: 24, height: 24)
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .buttonStyle(.plain)
-                .opacity(isHovered ? 1.0 : 0.4)
-                .help("Copy to clipboard")
-
-                // Delete Button
-                Button(action: deleteRecording) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .opacity(isHovered ? 1.0 : 0.4)
-                .help("Delete")
-            }
-            .onTapGesture { }  // Prevent tap from propagating to parent
         }
     }
 
