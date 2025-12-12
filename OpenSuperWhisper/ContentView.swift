@@ -35,6 +35,14 @@ class ContentViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        // Observe recording store changes to trigger view updates
+        recordingStore.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     func startRecording() {
@@ -485,12 +493,14 @@ struct RecordingRow: View {
         VStack(alignment: .leading, spacing: 0) {
             // Transcription Area - Click to open full view
             transcriptionArea
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
 
             // Bottom Bar - Metadata + Actions
             bottomBar
                 .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
                 .background(Color(NSColor.separatorColor).opacity(0.08))
         }
         .background(Color(NSColor.controlBackgroundColor))
@@ -518,7 +528,7 @@ struct RecordingRow: View {
 
     @ViewBuilder
     private var transcriptionArea: some View {
-        Text(recording.transcription)
+        Text(recording.transcription.trimmingCharacters(in: .whitespacesAndNewlines))
             .font(.body)
             .foregroundColor(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -622,6 +632,7 @@ struct TranscriptionDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var recordingStore = RecordingStore.shared
     @State private var editableText: String = ""
+    @State private var displayText: String = ""  // Track displayed text separately
     @State private var isEditing = false
     @State private var showCopyConfirmation = false
     @FocusState private var isTextFocused: Bool
@@ -658,7 +669,7 @@ struct TranscriptionDetailView: View {
                         .controlSize(.small)
                     } else {
                         Button("Edit") {
-                            editableText = recording.transcription
+                            editableText = displayText
                             isEditing = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 isTextFocused = true
@@ -694,7 +705,7 @@ struct TranscriptionDetailView: View {
                             return .handled
                         }
                 } else {
-                    Text(recording.transcription)
+                    Text(displayText)
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
@@ -704,10 +715,13 @@ struct TranscriptionDetailView: View {
         }
         .frame(minWidth: 500, minHeight: 400)
         .background(Color(NSColor.windowBackgroundColor))
+        .onAppear {
+            displayText = recording.transcription
+        }
     }
 
     private func copyToClipboard() {
-        let textToCopy = isEditing ? editableText : recording.transcription
+        let textToCopy = isEditing ? editableText : displayText
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(textToCopy, forType: .string)
 
@@ -722,7 +736,7 @@ struct TranscriptionDetailView: View {
     }
 
     private func saveChanges() {
-        guard editableText != recording.transcription else {
+        guard editableText != displayText else {
             isEditing = false
             return
         }
@@ -730,6 +744,9 @@ struct TranscriptionDetailView: View {
         var updatedRecording = recording
         updatedRecording.transcription = editableText
         recordingStore.updateRecording(updatedRecording)
+
+        // Update local display text and return to read-only mode (don't dismiss)
+        displayText = editableText
         isEditing = false
     }
 }

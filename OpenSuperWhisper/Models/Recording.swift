@@ -10,6 +10,10 @@ struct Recording: Identifiable, Codable, FetchableRecord, PersistableRecord, Equ
 
     static func == (lhs: Recording, rhs: Recording) -> Bool {
         return lhs.id == rhs.id
+            && lhs.transcription == rhs.transcription
+            && lhs.timestamp == rhs.timestamp
+            && lhs.fileName == rhs.fileName
+            && lhs.duration == rhs.duration
     }
 
     static var recordingsDirectory: URL {
