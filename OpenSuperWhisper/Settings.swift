@@ -244,9 +244,9 @@ struct SettingsView: View {
             Section {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Whisper Model")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     Picker("Model", selection: $viewModel.selectedModelURL) {
                         ForEach(viewModel.availableModels, id: \.self) { url in
                             Text(url.lastPathComponent)
@@ -259,23 +259,23 @@ struct SettingsView: View {
                     .background(Color(.controlBackgroundColor))
                     .cornerRadius(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Models Directory:")
-                                .font(.subheadline)
+                                .font(Typography.settingsLabel)
                             Spacer()
                             Button(action: {
                                 NSWorkspace.shared.open(WhisperModelManager.shared.modelsDirectory)
                             }) {
                                 Label("Open Folder", systemImage: "folder")
-                                    .font(.subheadline)
+                                    .font(Typography.settingsLabel)
                             }
                             .buttonStyle(.borderless)
                             .help("Open models directory")
                         }
                         Text(WhisperModelManager.shared.modelsDirectory.path)
-                            .font(.caption)
+                            .font(Typography.settingsMono)
                             .foregroundColor(.secondary)
                             .textSelection(.enabled)
                             .padding(8)
@@ -283,15 +283,15 @@ struct SettingsView: View {
                             .cornerRadius(6)
                     }
                     .padding(.top, 8)
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         Text("To display other models in the list, you need to download a ggml bin file and place it in the models folder. Then restart the application.")
-                            .font(.caption)
+                            .font(Typography.settingsCaption)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        
+
                         Link("Download models here", destination: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/tree/main")!)
-                        .font(.caption)
+                            .font(Typography.settingsCaption)
                     }
                     .padding(.top, 8)
                 }
@@ -310,13 +310,13 @@ struct SettingsView: View {
                 // Language Settings
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Language Settings")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Transcription Language")
-                            .font(.subheadline)
-                        
+                            .font(Typography.settingsLabel)
+
                         Picker("Language", selection: $viewModel.selectedLanguage) {
                             ForEach(LanguageUtil.availableLanguages, id: \.self) { code in
                                 Text(LanguageUtil.languageNames[code] ?? code)
@@ -329,18 +329,18 @@ struct SettingsView: View {
                         .background(Color(.controlBackgroundColor))
                         .cornerRadius(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        
+
                         Toggle(isOn: $viewModel.translateToEnglish) {
                             Text("Translate to English")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                         .padding(.top, 4)
-                        
+
                         if ["zh", "ja", "ko"].contains(viewModel.selectedLanguage) {
                             Toggle(isOn: $viewModel.useAsianAutocorrect) {
                                 Text("Use Asian Autocorrect")
-                                    .font(.subheadline)
+                                    .font(Typography.settingsBody)
                             }
                             .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                             .padding(.top, 4)
@@ -351,23 +351,23 @@ struct SettingsView: View {
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 // Output Options
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Output Options")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 10) {
                         Toggle(isOn: $viewModel.showTimestamps) {
                             Text("Show Timestamps")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
-                        
+
                         Toggle(isOn: $viewModel.suppressBlankAudio) {
                             Text("Suppress Blank Audio")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                     }
@@ -376,15 +376,16 @@ struct SettingsView: View {
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 // Initial Prompt
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Initial Prompt")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         TextEditor(text: $viewModel.initialPrompt)
+                            .font(Typography.settingsBody)
                             .frame(height: 60)
                             .padding(6)
                             .background(Color(.textBackgroundColor))
@@ -393,9 +394,9 @@ struct SettingsView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                             )
-                        
+
                         Text("Optional text to guide the model's transcription")
-                            .font(.caption)
+                            .font(Typography.settingsCaption)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -403,30 +404,30 @@ struct SettingsView: View {
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 // Transcriptions Directory
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Transcriptions Directory")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Directory:")
-                                .font(.subheadline)
+                                .font(Typography.settingsLabel)
                             Spacer()
                             Button(action: {
                                 NSWorkspace.shared.open(Recording.recordingsDirectory)
                             }) {
                                 Label("Open Folder", systemImage: "folder")
-                                    .font(.subheadline)
+                                    .font(Typography.settingsLabel)
                             }
                             .buttonStyle(.borderless)
                             .help("Open transcriptions directory")
                         }
-                        
+
                         Text(Recording.recordingsDirectory.path)
-                            .font(.caption)
+                            .font(Typography.settingsMono)
                             .foregroundColor(.secondary)
                             .textSelection(.enabled)
                             .padding(8)
@@ -449,21 +450,21 @@ struct SettingsView: View {
                 // Decoding Strategy
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Decoding Strategy")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 10) {
                         Toggle(isOn: $viewModel.useBeamSearch) {
                             Text("Use Beam Search")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                         .help("Beam search can provide better results but is slower")
-                        
+
                         if viewModel.useBeamSearch {
                             HStack {
                                 Text("Beam Size:")
-                                    .font(.subheadline)
+                                    .font(Typography.settingsBody)
                                 Spacer()
                                 Stepper("\(viewModel.beamSize)", value: $viewModel.beamSize, in: 1...10)
                                     .help("Number of beams to use in beam search")
@@ -477,38 +478,38 @@ struct SettingsView: View {
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 // Model Parameters
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Model Parameters")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text("Temperature:")
-                                    .font(.subheadline)
+                                    .font(Typography.settingsLabel)
                                 Spacer()
                                 Text(String(format: "%.2f", viewModel.temperature))
-                                    .font(.subheadline)
+                                    .font(Typography.settingsBody)
                                     .foregroundColor(.secondary)
                             }
-                            
+
                             Slider(value: $viewModel.temperature, in: 0.0...1.0, step: 0.1)
                                 .help("Higher values make the output more random")
                         }
-                        
+
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text("No Speech Threshold:")
-                                    .font(.subheadline)
+                                    .font(Typography.settingsLabel)
                                 Spacer()
                                 Text(String(format: "%.2f", viewModel.noSpeechThreshold))
-                                    .font(.subheadline)
+                                    .font(Typography.settingsBody)
                                     .foregroundColor(.secondary)
                             }
-                            
+
                             Slider(value: $viewModel.noSpeechThreshold, in: 0.0...1.0, step: 0.1)
                                 .help("Threshold for detecting speech vs. silence")
                         }
@@ -518,16 +519,16 @@ struct SettingsView: View {
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 // Debug Options
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Debug Options")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     Toggle(isOn: $viewModel.debugMode) {
                         Text("Debug Mode")
-                            .font(.subheadline)
+                            .font(Typography.settingsBody)
                     }
                     .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                     .help("Enable additional logging and debugging information")
@@ -547,28 +548,28 @@ struct SettingsView: View {
                 // Recording Shortcut
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Recording Shortcut")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Toggle record:")
-                                .font(.subheadline)
+                                .font(Typography.settingsLabel)
                             Spacer()
                             KeyboardShortcuts.Recorder("", name: .toggleRecord)
                                 .frame(width: 120)
                         }
-                        
+
                         if isRecordingNewShortcut {
                             Text("Press your new shortcut combination...")
                                 .foregroundColor(.secondary)
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                                 .padding(.vertical, 4)
                         }
-                        
+
                         Toggle(isOn: $viewModel.playSoundOnRecordStart) {
                             Text("Play sound when recording starts")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                         .help("Play a notification sound when recording begins")
@@ -576,7 +577,7 @@ struct SettingsView: View {
 
                         Toggle(isOn: $viewModel.autoCopyToClipboard) {
                             Text("Copy transcription to clipboard")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                         .help("Automatically copy transcription to clipboard after recording")
@@ -590,31 +591,31 @@ struct SettingsView: View {
                 // Instructions
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Instructions")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "1.circle.fill")
                                 .foregroundColor(.accentColor)
                             Text("Press any key combination to set as the recording shortcut")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                                 .foregroundColor(.secondary)
                         }
-                        
+
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "2.circle.fill")
                                 .foregroundColor(.accentColor)
                             Text("The shortcut will work even when the app is in the background")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                                 .foregroundColor(.secondary)
                         }
-                        
+
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "3.circle.fill")
                                 .foregroundColor(.accentColor)
                             Text("Recommended to use Command (⌘) or Option (⌥) key combinations")
-                                .font(.subheadline)
+                                .font(Typography.settingsBody)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -627,7 +628,7 @@ struct SettingsView: View {
                 // Accessibility Permission (Optional)
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Accessibility (Optional)")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -635,7 +636,7 @@ struct SettingsView: View {
                             Image(systemName: viewModel.isAccessibilityPermissionGranted ? "checkmark.circle.fill" : "info.circle.fill")
                                 .foregroundColor(viewModel.isAccessibilityPermissionGranted ? .green : .blue)
                             Text("Accessibility Access")
-                                .font(.subheadline)
+                                .font(Typography.settingsLabel)
                             Spacer()
                             if !viewModel.isAccessibilityPermissionGranted {
                                 Button("Grant Access") {
@@ -648,7 +649,7 @@ struct SettingsView: View {
                         Text(viewModel.isAccessibilityPermissionGranted
                             ? "Recording indicator will appear near your text cursor."
                             : "Accessibility is optional. Without it, the recording indicator will appear near your mouse cursor instead of the text caret. Keyboard shortcuts work without this permission.")
-                            .font(.caption)
+                            .font(Typography.settingsCaption)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -660,19 +661,19 @@ struct SettingsView: View {
                 // URL Scheme for External Tools
                 VStack(alignment: .leading, spacing: 16) {
                     Text("External Tools (Hammerspoon, Alfred, etc.)")
-                        .font(.headline)
+                        .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Use these URL commands to trigger recording from external apps:")
-                            .font(.subheadline)
+                            .font(Typography.settingsBody)
                             .foregroundColor(.secondary)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("opensuperwhisper://toggle").font(.system(.caption, design: .monospaced))
-                            Text("opensuperwhisper://start").font(.system(.caption, design: .monospaced))
-                            Text("opensuperwhisper://stop").font(.system(.caption, design: .monospaced))
-                            Text("opensuperwhisper://cancel").font(.system(.caption, design: .monospaced))
+                            Text("opensuperwhisper://toggle").font(Typography.settingsMono)
+                            Text("opensuperwhisper://start").font(Typography.settingsMono)
+                            Text("opensuperwhisper://stop").font(Typography.settingsMono)
+                            Text("opensuperwhisper://cancel").font(Typography.settingsMono)
                         }
                         .foregroundColor(.primary)
                     }

@@ -500,10 +500,30 @@ struct RecordingRow: View {
         return "\(minutes):\(String(format: "%02d", seconds))"
     }
 
-    private var formattedTime: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return formatter.string(from: recording.timestamp)
+    private var formattedDateTime: String {
+        let calendar = Calendar.current
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a"
+        let timeString = timeFormatter.string(from: recording.timestamp)
+
+        if calendar.isDateInToday(recording.timestamp) {
+            return timeString  // Just show time for today
+        } else if calendar.isDateInYesterday(recording.timestamp) {
+            return "Yesterday \(timeString)"
+        } else {
+            // Check if within last 7 days
+            let daysAgo = calendar.dateComponents([.day], from: recording.timestamp, to: Date()).day ?? 0
+            if daysAgo < 7 {
+                let weekdayFormatter = DateFormatter()
+                weekdayFormatter.dateFormat = "EEEE"  // Full weekday name
+                return "\(weekdayFormatter.string(from: recording.timestamp)) \(timeString)"
+            } else {
+                // Older: show date
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "MMM d, yyyy"
+                return dateFormatter.string(from: recording.timestamp)
+            }
+        }
     }
 
     private var trimmedText: String {
@@ -515,8 +535,9 @@ struct RecordingRow: View {
             // Transcription Area
             VStack(alignment: .leading, spacing: 8) {
                 Text(trimmedText)
-                    .font(.body)
+                    .font(Typography.cardBody)
                     .foregroundColor(.primary)
+                    .lineSpacing(Typography.cardBodyLineSpacing)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .lineLimit(isExpanded ? nil : 4)
 
@@ -529,10 +550,10 @@ struct RecordingRow: View {
                     }) {
                         HStack(spacing: 4) {
                             Text(isExpanded ? "Read less" : "Read more")
-                                .font(.subheadline)
+                                .font(Typography.cardReadMore)
                                 .foregroundColor(.secondary)
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(Typography.cardReadMoreIcon)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -542,28 +563,28 @@ struct RecordingRow: View {
             .padding(.horizontal, 16)
             .padding(.top, 16)
 
-            // Bottom Bar - Metadata + Actions
+            // Bottom Bar - Metadata + Actions (faded when not hovered)
             HStack(spacing: 0) {
                 // Left: Metadata
                 HStack(spacing: 6) {
-                    Text(formattedTime)
-                        .font(.subheadline)
+                    Text(formattedDateTime)
+                        .font(Typography.cardMeta)
                         .foregroundColor(.secondary)
 
                     Text("•")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary.opacity(0.5))
+                        .font(Typography.cardMetaSeparator)
+                        .foregroundColor(.secondary.opacity(0.4))
 
                     Text(formattedDuration)
-                        .font(.subheadline)
+                        .font(Typography.cardMeta)
                         .foregroundColor(.secondary)
 
                     Text("•")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary.opacity(0.5))
+                        .font(Typography.cardMetaSeparator)
+                        .foregroundColor(.secondary.opacity(0.4))
 
                     Text("\(wordCount) words")
-                        .font(.subheadline)
+                        .font(Typography.cardMeta)
                         .foregroundColor(.secondary)
                 }
 
@@ -574,7 +595,7 @@ struct RecordingRow: View {
                     // Play/Stop Button
                     Button(action: togglePlayback) {
                         Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                            .font(.system(size: 14, weight: .regular))
+                            .font(Typography.cardActionIcon)
                             .foregroundColor(isPlaying ? .red : .secondary)
                     }
                     .buttonStyle(.plain)
@@ -583,7 +604,7 @@ struct RecordingRow: View {
                     // Copy Button
                     Button(action: copyToClipboard) {
                         Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 14, weight: .regular))
+                            .font(Typography.cardActionIcon)
                             .foregroundColor(showCopyConfirmation ? .green : .secondary)
                     }
                     .buttonStyle(.plain)
@@ -592,13 +613,15 @@ struct RecordingRow: View {
                     // Delete Button
                     Button(action: deleteRecording) {
                         Image(systemName: "trash")
-                            .font(.system(size: 14, weight: .regular))
+                            .font(Typography.cardActionIcon)
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
                     .help("Delete")
                 }
             }
+            .opacity(isHovered || isPlaying ? 1.0 : 0.4)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
@@ -669,11 +692,11 @@ struct TranscriptionDetailView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Transcription")
-                        .font(.headline)
+                        .font(Typography.detailTitle)
                     Text(recording.timestamp, format: .dateTime.month().day().year().hour().minute())
-                        .font(.caption)
+                        .font(Typography.detailDate)
                         .foregroundColor(.secondary)
                 }
 
@@ -724,7 +747,8 @@ struct TranscriptionDetailView: View {
             ScrollView {
                 if isEditing {
                     TextEditor(text: $editableText)
-                        .font(.body)
+                        .font(Typography.detailBody)
+                        .lineSpacing(Typography.detailEditorLineSpacing)
                         .focused($isTextFocused)
                         .frame(maxWidth: .infinity, minHeight: 300)
                         .padding()
@@ -734,7 +758,8 @@ struct TranscriptionDetailView: View {
                         }
                 } else {
                     Text(displayText)
-                        .font(.body)
+                        .font(Typography.detailBody)
+                        .lineSpacing(Typography.detailBodyLineSpacing)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                         .padding()
