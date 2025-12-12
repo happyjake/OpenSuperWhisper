@@ -1,132 +1,126 @@
 import Cocoa
 import SwiftUI
-
-enum RecordingState {
-    case idle
-    case recording
-    case decoding
-}
+import Combine
 
 @MainActor
 protocol IndicatorViewDelegate: AnyObject {
-    
     func didFinishDecoding()
 }
 
 @MainActor
 class IndicatorViewModel: ObservableObject {
-    @Published var state: RecordingState = .idle
-    @Published var isBlinking = false
-    @Published var recorder: AudioRecorder = .shared
     @Published var isVisible = false
-    
+
+    private let stateManager = RecordingStateManager.shared
+    private let recordingStore = RecordingStore.shared
+    private var cancellables = Set<AnyCancellable>()
+
     var delegate: IndicatorViewDelegate?
-    private var blinkTimer: Timer?
-    
-    // Get a reference to the RecordingStore at initialization time
-    private let recordingStore: RecordingStore
-    
+
+    // Forward state from shared manager
+    var state: RecordingStateManager.State { stateManager.state }
+    var isBlinking: Bool { stateManager.isBlinking }
+    var recordingDuration: TimeInterval { stateManager.recordingDuration }
+
     init() {
-        self.recordingStore = RecordingStore.shared
+        // Observe state changes to trigger view updates
+        stateManager.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        stateManager.$isBlinking
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
-    
+
     func startRecording() {
-        state = .recording
-        startBlinking()
-        recorder.startRecording()
+        stateManager.startRecording()
     }
-    
+
     func startDecoding() {
-        state = .decoding
-        stopBlinking()
-        
-        if let tempURL = recorder.stopRecording() {
-            // Get a reference to the transcription service
-            let transcription = TranscriptionService.shared
-            
-            Task { [weak self] in
-                guard let self = self else { return }
-                
-                do {
-                    print("start decoding...")
-                    let text = try await transcription.transcribeAudio(url: tempURL, settings: Settings())
-                    
-                    // Create a new Recording instance
-                    let timestamp = Date()
-                    let fileName = "\(Int(timestamp.timeIntervalSince1970)).wav"
-                    let finalURL = Recording(
+        guard let tempURL = stateManager.stopRecording() else {
+            print("!!! Not found record url !!!")
+            delegate?.didFinishDecoding()
+            return
+        }
+
+        let transcription = TranscriptionService.shared
+        let duration = stateManager.recordingDuration
+
+        Task { [weak self] in
+            guard let self = self else { return }
+
+            do {
+                print("start decoding...")
+                let text = try await transcription.transcribeAudio(url: tempURL, settings: Settings())
+
+                // Create a new Recording instance
+                let timestamp = Date()
+                let fileName = "\(Int(timestamp.timeIntervalSince1970)).wav"
+                let finalURL = Recording(
+                    id: UUID(),
+                    timestamp: timestamp,
+                    fileName: fileName,
+                    transcription: text,
+                    duration: duration
+                ).url
+
+                // Move the temporary recording to final location
+                try AudioRecorder.shared.moveTemporaryRecording(from: tempURL, to: finalURL)
+
+                // Save the recording to store
+                await MainActor.run {
+                    self.recordingStore.addRecording(Recording(
                         id: UUID(),
                         timestamp: timestamp,
                         fileName: fileName,
                         transcription: text,
-                        duration: 0 // TODO: Get actual duration
-                    ).url
-                    
-                    // Move the temporary recording to final location
-                    try recorder.moveTemporaryRecording(from: tempURL, to: finalURL)
-                    
-                    // Save the recording to store
-                    await MainActor.run {
-                        self.recordingStore.addRecording(Recording(
-                            id: UUID(),
-                            timestamp: timestamp,
-                            fileName: fileName,
-                            transcription: text,
-                            duration: 0 // TODO: Get actual duration
-                        ))
-                    }
-                    
-                    // Copy transcribed text to clipboard if enabled
-                    if AppPreferences.shared.autoCopyToClipboard {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(text, forType: .string)
-                        print("Transcription result (copied to clipboard): \(text)")
-                    } else {
-                        print("Transcription result: \(text)")
-                    }
-                } catch {
-                    print("Error transcribing audio: \(error)")
-                    try? FileManager.default.removeItem(at: tempURL)
+                        duration: duration
+                    ))
                 }
-                
+
+                // Copy transcribed text to clipboard if enabled
+                let shouldCopy = AppPreferences.shared.autoCopyToClipboard
+                if shouldCopy {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    print("Transcription result (copied to clipboard): \(text)")
+                } else {
+                    print("Transcription result: \(text)")
+                }
+
+                // Transition to copied state or idle
                 await MainActor.run {
-                    self.delegate?.didFinishDecoding()
+                    self.stateManager.finishDecoding(copied: shouldCopy)
+                }
+
+                // Wait for copied state to show before hiding
+                if shouldCopy {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                }
+
+            } catch {
+                print("Error transcribing audio: \(error)")
+                try? FileManager.default.removeItem(at: tempURL)
+                await MainActor.run {
+                    self.stateManager.reset()
                 }
             }
-        } else {
-            
-            print("!!! Not found record url !!!")
-            
-            Task {
-                await MainActor.run {
-                    self.delegate?.didFinishDecoding()
-                }
+
+            await MainActor.run {
+                self.delegate?.didFinishDecoding()
             }
         }
-    }
-    
-    func insertTextUsingPasteboard(_ text: String) {
-        ClipboardUtil.insertTextUsingPasteboard(text)
-    }
-    
-    private func startBlinking() {
-        blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in
-            // Update UI on the main thread
-            Task { @MainActor in
-                guard let self = self else { return }
-                self.isBlinking.toggle()
-            }
-        }
-    }
-    
-    private func stopBlinking() {
-        blinkTimer?.invalidate()
-        blinkTimer = nil
-        isBlinking = false
     }
 
     func cancelRecording() {
-        recorder.cancelRecording()
+        stateManager.cancel()
     }
 
     @MainActor
@@ -143,7 +137,7 @@ class IndicatorViewModel: ObservableObject {
 
 struct RecordingIndicator: View {
     let isBlinking: Bool
-    
+
     var body: some View {
         Circle()
             .fill(
@@ -166,45 +160,73 @@ struct RecordingIndicator: View {
 struct IndicatorWindow: View {
     @ObservedObject var viewModel: IndicatorViewModel
     @Environment(\.colorScheme) private var colorScheme
-    
+
     private var backgroundColor: Color {
         colorScheme == .dark
             ? Color.black.opacity(0.24)
             : Color.white.opacity(0.24)
     }
-    
-    var body: some View {
 
+    var body: some View {
         let rect = RoundedRectangle(cornerRadius: 24)
-        
+
         VStack(spacing: 12) {
             switch viewModel.state {
             case .recording:
                 HStack(spacing: 8) {
                     RecordingIndicator(isBlinking: viewModel.isBlinking)
                         .frame(width: 24)
-                    
+
                     Text("Recording...")
                         .font(.system(size: 13, weight: .semibold))
+
+                    Spacer()
+
+                    // Stop button with fixed alignment
+                    Button(action: {
+                        IndicatorWindowManager.shared.stopRecording()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 20, height: 20)
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Circle())
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
+
             case .decoding:
                 HStack(spacing: 8) {
                     ProgressView()
                         .scaleEffect(0.7)
                         .frame(width: 24)
-                    
+
                     Text("Transcribing...")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
+            case .copied:
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.system(size: 16))
+                        .frame(width: 24)
+
+                    Text("Copied!")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             case .idle:
                 EmptyView()
             }
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 16)
         .frame(height: 36)
         .background {
             rect
@@ -228,22 +250,11 @@ struct IndicatorWindow: View {
 }
 
 struct IndicatorWindowPreview: View {
-    @StateObject private var recordingVM = {
-        let vm = IndicatorViewModel()
-//        vm.startRecording()
-        return vm
-    }()
-    
-    @StateObject private var decodingVM = {
-        let vm = IndicatorViewModel()
-        vm.startDecoding()
-        return vm
-    }()
-    
+    @StateObject private var recordingVM = IndicatorViewModel()
+
     var body: some View {
         VStack(spacing: 20) {
             IndicatorWindow(viewModel: recordingVM)
-            IndicatorWindow(viewModel: decodingVM)
         }
         .padding()
         .frame(height: 200)

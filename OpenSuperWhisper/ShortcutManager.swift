@@ -15,8 +15,6 @@ extension KeyboardShortcuts.Name {
 class ShortcutManager {
     static let shared = ShortcutManager()
 
-    // Current recording indicator view and state
-    private var activeVm: IndicatorViewModel?
     private var holdWorkItem: DispatchWorkItem?
     private let holdThreshold: TimeInterval = 0.3
     private var holdMode = false
@@ -31,7 +29,10 @@ class ShortcutManager {
             self.holdMode = false
             // Perform UI actions on the main actor
             Task { @MainActor in
-                if self.activeVm == nil {
+                let indicatorManager = IndicatorWindowManager.shared
+                let stateManager = RecordingStateManager.shared
+
+                if !indicatorManager.isVisible {
                     // First press: show indicator and start recording immediately
                     let cursorPosition = FocusUtils.getCurrentCursorPosition()
                     let indicatorPoint: NSPoint?
@@ -41,13 +42,11 @@ class ShortcutManager {
                     } else {
                         indicatorPoint = cursorPosition
                     }
-                    let vm = IndicatorWindowManager.shared.show(nearPoint: indicatorPoint)
+                    let vm = indicatorManager.show(nearPoint: indicatorPoint)
                     vm.startRecording()
-                    self.activeVm = vm
-                } else if !self.holdMode {
-                    // Second quick press: toggle off recording
-                    IndicatorWindowManager.shared.stopRecording()
-                    self.activeVm = nil
+                } else if stateManager.isRecording && !self.holdMode {
+                    // Second quick press while recording: toggle off
+                    indicatorManager.stopRecording()
                 }
             }
             // Schedule hold-mode flag after threshold
@@ -65,10 +64,9 @@ class ShortcutManager {
             self.holdWorkItem = nil
             // Perform UI actions on the main actor
             Task { @MainActor in
-                if self.holdMode {
+                if self.holdMode && RecordingStateManager.shared.isRecording {
                     // End hold-to-record
                     IndicatorWindowManager.shared.stopRecording()
-                    self.activeVm = nil
                     self.holdMode = false
                 }
                 // Tap-mode toggle off handled on keyDown
@@ -78,9 +76,8 @@ class ShortcutManager {
         KeyboardShortcuts.onKeyUp(for: .escape) {
             // Run on the main actor to safely interact with actor-isolated methods
             Task { @MainActor in
-                if self.activeVm != nil {
+                if IndicatorWindowManager.shared.isVisible {
                     IndicatorWindowManager.shared.stopForce()
-                    self.activeVm = nil
                 }
             }
         }

@@ -6,127 +6,115 @@
 //
 
 import AVFoundation
+import Combine
 import KeyboardShortcuts
 import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
 class ContentViewModel: ObservableObject {
-    @Published var state: RecordingState = .idle
-    @Published var isBlinking = false
+    private let stateManager = RecordingStateManager.shared
     @Published var recorder: AudioRecorder = .shared
     @Published var transcriptionService = TranscriptionService.shared
     @Published var recordingStore = RecordingStore.shared
-    @Published var recordingDuration: TimeInterval = 0
     @Published var microphoneService = MicrophoneService.shared
 
-    private var blinkTimer: Timer?
-    private var recordingStartTime: Date?
-    private var durationTimer: Timer?
+    private var cancellables = Set<AnyCancellable>()
 
-    var isRecording: Bool {
-        recorder.isRecording
-    }
-    
-    func startRecording() {
-        state = .recording
-        startBlinking()
-        recordingStartTime = Date()
-        recordingDuration = 0
-        
-        // Start timer to track recording duration
-        durationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            // Capture the start time in a local variable to avoid actor isolation issues
-            let startTime = Date()
-            
-            // Update duration on the main thread
-            Task { @MainActor in
-                if let recordingStartTime = self.recordingStartTime {
-                    self.recordingDuration = startTime.timeIntervalSince(recordingStartTime)
-                }
+    // Forward state from shared manager
+    var state: RecordingStateManager.State { stateManager.state }
+    var isBlinking: Bool { stateManager.isBlinking }
+    var recordingDuration: TimeInterval { stateManager.recordingDuration }
+    var isRecording: Bool { stateManager.isRecording }
+
+    init() {
+        // Observe state changes to trigger view updates
+        stateManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
             }
-        }
-        RunLoop.current.add(durationTimer!, forMode: .common)
-        
-        recorder.startRecording()
+            .store(in: &cancellables)
+    }
+
+    func startRecording() {
+        stateManager.startRecording()
     }
 
     func startDecoding() {
-        state = .decoding
-        stopBlinking()
-        stopDurationTimer()
+        // Use shared state manager to stop recording
+        // Returns nil if already stopped by another UI (e.g., floating indicator)
+        guard let tempURL = stateManager.stopRecording() else {
+            return
+        }
 
-        if let tempURL = recorder.stopRecording() {
-            Task { [weak self] in
-                guard let self = self else { return }
+        let duration = stateManager.recordingDuration
 
-                do {
-                    print("start decoding...")
-                    let text = try await transcriptionService.transcribeAudio(url: tempURL, settings: Settings())
+        Task { [weak self] in
+            guard let self = self else { return }
 
-                    // Capture the current recording duration
-                    let duration = await MainActor.run { self.recordingDuration }
-                    
-                    // Create a new Recording instance
-                    let timestamp = Date()
-                    let fileName = "\(Int(timestamp.timeIntervalSince1970)).wav"
-                    let finalURL = Recording(
+            do {
+                print("start decoding...")
+                let text = try await transcriptionService.transcribeAudio(url: tempURL, settings: Settings())
+
+                // Create a new Recording instance
+                let timestamp = Date()
+                let fileName = "\(Int(timestamp.timeIntervalSince1970)).wav"
+                let finalURL = Recording(
+                    id: UUID(),
+                    timestamp: timestamp,
+                    fileName: fileName,
+                    transcription: text,
+                    duration: duration
+                ).url
+
+                // Move the temporary recording to final location
+                try recorder.moveTemporaryRecording(from: tempURL, to: finalURL)
+
+                // Save the recording to store
+                await MainActor.run {
+                    self.recordingStore.addRecording(Recording(
                         id: UUID(),
                         timestamp: timestamp,
                         fileName: fileName,
                         transcription: text,
-                        duration: duration // Use tracked duration
-                    ).url
+                        duration: duration
+                    ))
+                }
 
-                    // Move the temporary recording to final location
-                    try recorder.moveTemporaryRecording(from: tempURL, to: finalURL)
-
-                    // Save the recording to store
-                    await MainActor.run {
-                        self.recordingStore.addRecording(Recording(
-                            id: UUID(),
-                            timestamp: timestamp,
-                            fileName: fileName,
-                            transcription: text,
-                            duration: self.recordingDuration // Use tracked duration
-                        ))
-                    }
-
+                // Copy transcribed text to clipboard if enabled
+                let shouldCopy = AppPreferences.shared.autoCopyToClipboard
+                if shouldCopy {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    print("Transcription result (copied to clipboard): \(text)")
+                } else {
                     print("Transcription result: \(text)")
-                } catch {
-                    print("Error transcribing audio: \(error)")
-                    try? FileManager.default.removeItem(at: tempURL)
                 }
 
+                // Transition to copied state or idle
                 await MainActor.run {
-                    self.state = .idle
-                    self.recordingDuration = 0
+                    self.stateManager.finishDecoding(copied: shouldCopy)
+                }
+
+                // Wait for copied state to show before hiding
+                if shouldCopy {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                }
+
+            } catch {
+                print("Error transcribing audio: \(error)")
+                try? FileManager.default.removeItem(at: tempURL)
+                await MainActor.run {
+                    self.stateManager.reset()
                 }
             }
-        }
-    }
 
-    private func stopDurationTimer() {
-        durationTimer?.invalidate()
-        durationTimer = nil
-        recordingStartTime = nil
-    }
-
-    private func startBlinking() {
-        blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.isBlinking.toggle()
+            await MainActor.run {
+                // Hide the floating indicator after transcription completes
+                IndicatorWindowManager.shared.hide()
             }
         }
-        RunLoop.current.add(blinkTimer!, forMode: .common)
-    }
-
-    private func stopBlinking() {
-        blinkTimer?.invalidate()
-        blinkTimer = nil
-        isBlinking = false
     }
 }
 
@@ -175,90 +163,101 @@ struct ContentView: View {
                     .cornerRadius(20)
                     .padding([.horizontal, .top])
 
-                    ScrollView(showsIndicators: false) {
-                        if filteredRecordings.isEmpty {
-                            VStack(spacing: 16) {
-                                if !searchText.isEmpty {
-                                    // Show "no results" for search
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.secondary)
-                                        .padding(.top, 40)
+                    ScrollViewReader { scrollProxy in
+                        ScrollView(showsIndicators: false) {
+                            if filteredRecordings.isEmpty {
+                                VStack(spacing: 16) {
+                                    if !searchText.isEmpty {
+                                        // Show "no results" for search
+                                        Image(systemName: "magnifyingglass")
+                                            .font(.system(size: 40))
+                                            .foregroundColor(.secondary)
+                                            .padding(.top, 40)
 
-                                    Text("No results found")
-                                        .font(.headline)
-                                        .foregroundColor(.secondary)
+                                        Text("No results found")
+                                            .font(.headline)
+                                            .foregroundColor(.secondary)
 
-                                    Text("Try different search terms")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal)
-                                } else {
-                                    // Show "start recording" tip
-                                    Image(systemName: "arrow.down.circle")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.secondary)
-                                        .padding(.top, 40)
+                                        Text("Try different search terms")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                            .multilineTextAlignment(.center)
+                                            .padding(.horizontal)
+                                    } else {
+                                        // Show "start recording" tip
+                                        Image(systemName: "arrow.down.circle")
+                                            .font(.system(size: 40))
+                                            .foregroundColor(.secondary)
+                                            .padding(.top, 40)
 
-                                    Text("No recordings yet")
-                                        .font(.headline)
-                                        .foregroundColor(.secondary)
+                                        Text("No recordings yet")
+                                            .font(.headline)
+                                            .foregroundColor(.secondary)
 
-                                    Text("Tap the record button below to get started")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal)
+                                        Text("Tap the record button below to get started")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                            .multilineTextAlignment(.center)
+                                            .padding(.horizontal)
 
-                                    if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
-                                        VStack(spacing: 8) {
-                                            Text("Pro Tip:")
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
-
-                                            HStack(spacing: 4) {
-                                                Text("Press")
+                                        if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
+                                            VStack(spacing: 8) {
+                                                Text("Pro Tip:")
                                                     .font(.subheadline)
                                                     .foregroundColor(.secondary)
-                                                Text(shortcut.description)
-                                                    .font(.system(size: 16, weight: .medium))
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 3)
-                                                    .background(Color.secondary.opacity(0.2))
-                                                    .cornerRadius(6)
-                                                Text("anywhere")
+
+                                                HStack(spacing: 4) {
+                                                    Text("Press")
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.secondary)
+                                                    Text(shortcut.description)
+                                                        .font(.system(size: 16, weight: .medium))
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 3)
+                                                        .background(Color.secondary.opacity(0.2))
+                                                        .cornerRadius(6)
+                                                    Text("anywhere")
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.secondary)
+                                                }
+
+                                                Text("to quickly record and paste text")
                                                     .font(.subheadline)
                                                     .foregroundColor(.secondary)
                                             }
-
-                                            Text("to quickly record and paste text")
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
+                                            .padding(.top, 16)
                                         }
-                                        .padding(.top, 16)
                                     }
                                 }
+                                .frame(maxWidth: .infinity)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            } else {
+                                LazyVStack(spacing: 8) {
+                                    ForEach(filteredRecordings) { recording in
+                                        RecordingRow(recording: recording)
+                                            .id(recording.id)
+                                            .transition(.asymmetric(
+                                                insertion: .scale.combined(with: .opacity),
+                                                removal: .opacity.combined(with: .scale(scale: 0.8))
+                                            ))
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.top, 16)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                             }
-                            .frame(maxWidth: .infinity)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        } else {
-                            LazyVStack(spacing: 8) {
-                                ForEach(filteredRecordings) { recording in
-                                    RecordingRow(recording: recording)
-                                        .transition(.asymmetric(
-                                            insertion: .scale.combined(with: .opacity),
-                                            removal: .opacity.combined(with: .scale(scale: 0.8))
-                                        ))
+                        }
+                        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: filteredRecordings)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: searchText)
+                        .onChange(of: viewModel.recordingStore.recordings.count) { oldCount, newCount in
+                            // Scroll to the newest recording when a new one is added
+                            if newCount > oldCount, let newestRecording = viewModel.recordingStore.recordings.first {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    scrollProxy.scrollTo(newestRecording.id, anchor: .top)
                                 }
                             }
-                            .padding(.horizontal)
-                            .padding(.top, 16)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: filteredRecordings)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: searchText)
                     .safeAreaInset(edge: .bottom) {
                         // Bottom bar with floating record button
                         VStack(spacing: 0) {
@@ -266,20 +265,23 @@ struct ContentView: View {
                             Button(action: {
                                 if viewModel.isRecording {
                                     viewModel.startDecoding()
-                                } else {
+                                } else if viewModel.state == .idle {
                                     viewModel.startRecording()
                                 }
                             }) {
-                                if viewModel.state == .decoding {
+                                switch viewModel.state {
+                                case .decoding:
                                     ProgressView()
                                         .scaleEffect(1.0)
                                         .frame(width: 64, height: 64)
-                                } else {
+                                case .copied:
+                                    CopiedButton()
+                                default:
                                     MainRecordButton(isRecording: viewModel.isRecording)
                                 }
                             }
                             .buttonStyle(.plain)
-                            .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding)
+                            .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding || viewModel.state == .copied)
                             .background {
                                 ZStack {
                                     // Soft outer glow - very blurred
@@ -863,6 +865,34 @@ struct MainRecordButton: View {
         .shadow(color: isRecording ? .red.opacity(0.5) : .black.opacity(0.1), radius: isRecording ? 12 : 4)
         .scaleEffect(isRecording ? 1.08 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isRecording)
+    }
+}
+
+struct CopiedButton: View {
+    var body: some View {
+        ZStack {
+            // Solid background to block glass effect - matches glass body size
+            Circle()
+                .fill(Color.green)
+                .frame(width: 84, height: 84)
+
+            // Inner circle with gradient for depth
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.green.opacity(0.9), Color.green],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 64, height: 64)
+
+            // Checkmark icon
+            Image(systemName: "checkmark")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .shadow(color: .green.opacity(0.5), radius: 12)
     }
 }
 

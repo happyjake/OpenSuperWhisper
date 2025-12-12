@@ -9,9 +9,9 @@ class IndicatorWindowManager: IndicatorViewDelegate {
     var window: NSWindow?
     var viewModel: IndicatorViewModel?
 
-    /// Returns true if currently recording audio
+    /// Returns true if currently recording audio (reads from shared state manager)
     var isRecording: Bool {
-        return viewModel?.state == .recording
+        return RecordingStateManager.shared.isRecording
     }
 
     private init() {}
@@ -38,7 +38,7 @@ class IndicatorWindowManager: IndicatorViewDelegate {
             panel.backgroundColor = .clear
             panel.isOpaque = false
             panel.hasShadow = false
-            panel.ignoresMouseEvents = true
+            panel.ignoresMouseEvents = false  // Allow clicks for stop button
             panel.hidesOnDeactivate = false
             
             self.window = panel
@@ -79,6 +79,11 @@ class IndicatorWindowManager: IndicatorViewDelegate {
     
     func stopRecording() {
         viewModel?.startDecoding()
+    }
+
+    /// Check if the indicator window is currently visible
+    var isVisible: Bool {
+        return viewModel != nil && (window?.isVisible ?? false)
     }
     
     func stopForce() {
