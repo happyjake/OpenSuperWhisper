@@ -72,6 +72,12 @@ class OnboardingViewModel: ObservableObject {
                             AppPreferences.shared.selectedModelPath = modelPath
                             print("Model path after download: \(modelPath)")
                         }
+
+                        // Trigger CoreML download in background if available (non-blocking)
+                        if let coreMLURL = model.url.coreMLEncoderURL {
+                            print("Starting CoreML encoder download in background...")
+                            self?.modelManager.downloadCoreMLInBackground(from: coreMLURL, for: filename)
+                        }
                     }
                 }
             }

@@ -121,3 +121,6 @@ default.profraw
 *.dmg
 .cursorrules
 OpenSuperWhisper.dmg.sha256
+
+# Auto-generated build info
+OpenSuperWhisper/BuildInfo.swift

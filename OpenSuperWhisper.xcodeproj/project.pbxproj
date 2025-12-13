@@ -30,6 +30,7 @@
 		CE84DF712D55778000C54EA6 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CE84DF6F2D55778000C54EA6 /* Metal.framework */; };
 		CE84DF722D55778000C54EA6 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CE84DF702D55778000C54EA6 /* MetalKit.framework */; };
 		CE84DF762D5577D200C54EA6 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CE84DF752D5577D200C54EA6 /* Accelerate.framework */; };
+		CE84DF772D5577D300C54EA6 /* CoreML.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CE84DF782D5577D300C54EA6 /* CoreML.framework */; };
 		CE84E17D2D56550B00C54EA6 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = CE84E17C2D56550B00C54EA6 /* KeyboardShortcuts */; };
 		CEAC00032D82F00200000000 /* libautocorrect_swift.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CEAC00012D82F00000000000 /* libautocorrect_swift.dylib */; };
 		CEAC00042D82F10000000000 /* libautocorrect_swift.dylib in CopyFiles */ = {isa = PBXBuildFile; fileRef = CEAC00012D82F00000000000 /* libautocorrect_swift.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -162,6 +163,7 @@
 		CE84DF672D55762200C54EA6 /* libwhisper.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libwhisper.a; sourceTree = "<group>"; };
 		CE84DF6D2D55777800C54EA6 /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
 		CE84DF6F2D55778000C54EA6 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		CE84DF782D5577D300C54EA6 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
 		CE84DF702D55778000C54EA6 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		CE84DF732D5577A700C54EA6 /* libggml-blas.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = "libggml-blas.a"; sourceTree = "<group>"; };
 		CE84DF752D5577D200C54EA6 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
@@ -211,6 +213,7 @@
 				840156D42D79EDBA00FB5FFE /* libggml-cpu.a in Frameworks */,
 				840156D32D79EDBA00FB5FFE /* libggml-blas.a in Frameworks */,
 				CE84DF762D5577D200C54EA6 /* Accelerate.framework in Frameworks */,
+				CE84DF772D5577D300C54EA6 /* CoreML.framework in Frameworks */,
 				840156D22D79EDB500FB5FFE /* libggml-base.a in Frameworks */,
 				CE84DF712D55778000C54EA6 /* Metal.framework in Frameworks */,
 				CE0EAD6E2D56ACA80067FDEE /* GRDB in Frameworks */,
@@ -257,6 +260,7 @@
 			isa = PBXGroup;
 			children = (
 				CE84DF752D5577D200C54EA6 /* Accelerate.framework */,
+				CE84DF782D5577D300C54EA6 /* CoreML.framework */,
 				CE84DF732D5577A700C54EA6 /* libggml-blas.a */,
 				CE84DF6F2D55778000C54EA6 /* Metal.framework */,
 				CE84DF702D55778000C54EA6 /* MetalKit.framework */,
@@ -824,6 +828,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lomp",
+					"$(PROJECT_DIR)/libwhisper/build/whisper.cpp/src/$(CONFIGURATION)/libwhisper.coreml.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = ru.starmel.OpenSuperWhisper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -886,6 +891,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lomp",
+					"$(PROJECT_DIR)/libwhisper/build/whisper.cpp/src/$(CONFIGURATION)/libwhisper.coreml.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = ru.starmel.OpenSuperWhisper;
 				PRODUCT_NAME = "$(TARGET_NAME)";

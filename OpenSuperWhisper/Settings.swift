@@ -96,6 +96,11 @@ class SettingsViewModel: ObservableObject {
 
     @Published var isAccessibilityPermissionGranted: Bool = false
     private var accessibilityCheckTimer: Timer?
+    private var cancellables = Set<AnyCancellable>()
+
+    // CoreML state (observed from WhisperModelManager)
+    @Published var coreMLDownloadProgress: Double = 0
+    @Published var isCoreMLDownloading: Bool = false
 
     init() {
         let prefs = AppPreferences.shared
@@ -119,6 +124,63 @@ class SettingsViewModel: ObservableObject {
         loadAvailableModels()
         checkAccessibilityPermission()
         startAccessibilityChecking()
+        observeCoreMLState()
+    }
+
+    private func observeCoreMLState() {
+        let manager = WhisperModelManager.shared
+        manager.$coreMLDownloadProgress
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] progress in
+                self?.coreMLDownloadProgress = progress
+            }
+            .store(in: &cancellables)
+
+        manager.$isCoreMLDownloading
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] downloading in
+                self?.isCoreMLDownloading = downloading
+            }
+            .store(in: &cancellables)
+    }
+
+    func hasCoreMLModel() -> Bool {
+        guard let modelName = selectedModelURL?.lastPathComponent else { return false }
+        return WhisperModelManager.shared.hasCoreMLModel(for: modelName)
+    }
+
+    func isCoreMLAvailable() -> Bool {
+        guard let modelURL = selectedModelURL else { return false }
+        // Check if this model has a CoreML encoder available (non-quantized models only)
+        let modelName = modelURL.lastPathComponent
+        let quantizedSuffixes = ["-q5_0.bin", "-q5_1.bin", "-q8_0.bin"]
+        for suffix in quantizedSuffixes {
+            if modelName.contains(suffix) {
+                return false
+            }
+        }
+        return true
+    }
+
+    func downloadCoreML() {
+        guard let modelURL = selectedModelURL else { return }
+        let modelName = modelURL.lastPathComponent
+
+        // Construct Hugging Face URL from model filename
+        let baseName = modelName.replacingOccurrences(of: ".bin", with: "")
+        let huggingFaceURLString = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(baseName)-encoder.mlmodelc.zip?download=true"
+        guard let coreMLURL = URL(string: huggingFaceURLString) else { return }
+
+        WhisperModelManager.shared.downloadCoreMLInBackground(from: coreMLURL, for: modelName)
+    }
+
+    func cancelCoreMLDownload() {
+        WhisperModelManager.shared.cancelCoreMLDownload()
+    }
+
+    func deleteCoreML() {
+        guard let modelName = selectedModelURL?.lastPathComponent else { return }
+        try? WhisperModelManager.shared.deleteCoreMLModel(for: modelName)
     }
 
     deinit {
@@ -215,6 +277,13 @@ struct SettingsView: View {
                     Label("Advanced", systemImage: "gear")
                 }
                 .tag(3)
+
+            // About
+            aboutSettings
+                .tabItem {
+                    Label("About", systemImage: "info.circle")
+                }
+                .tag(4)
             }
         .padding()
         .frame(width: 550)
@@ -294,6 +363,112 @@ struct SettingsView: View {
                             .font(Typography.settingsCaption)
                     }
                     .padding(.top, 8)
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // CoreML Acceleration Section
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Neural Engine Acceleration")
+                        .font(Typography.settingsHeader)
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        if viewModel.isCoreMLDownloading {
+                            // Downloading state
+                            HStack(spacing: 12) {
+                                ProgressView(value: viewModel.coreMLDownloadProgress)
+                                    .frame(width: 120)
+                                Text("\(Int(viewModel.coreMLDownloadProgress * 100))%")
+                                    .font(Typography.settingsBody)
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 40)
+                                Spacer()
+                                Button("Cancel") {
+                                    viewModel.cancelCoreMLDownload()
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            Text("Downloading CoreML encoder...")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                        } else if viewModel.hasCoreMLModel() {
+                            // Downloaded state
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("CoreML Enabled")
+                                    .font(Typography.settingsBody)
+                                Spacer()
+                                Button("Delete") {
+                                    viewModel.deleteCoreML()
+                                }
+                                .buttonStyle(.bordered)
+                                .foregroundColor(.red)
+                            }
+                            Text("Transcription uses Apple Neural Engine for faster processing")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                        } else if viewModel.isCoreMLAvailable() {
+                            // Available but not downloaded
+                            HStack {
+                                Image(systemName: "arrow.down.circle")
+                                    .foregroundColor(.secondary)
+                                Text("Not Downloaded")
+                                    .font(Typography.settingsBody)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Button("Download") {
+                                    viewModel.downloadCoreML()
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                            Text("Download CoreML encoder for ~1.5-2x faster transcription")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+
+                            // Manual download instructions
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Manual download:")
+                                    .font(Typography.settingsCaption)
+                                    .foregroundColor(.secondary)
+                                    .padding(.top, 8)
+
+                                if let modelName = viewModel.selectedModelURL?.lastPathComponent {
+                                    let baseName = modelName.replacingOccurrences(of: ".bin", with: "")
+                                    let downloadURL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(baseName)-encoder.mlmodelc.zip"
+                                    Link(downloadURL, destination: URL(string: downloadURL)!)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(.blue)
+
+                                    Button("Show Models Folder") {
+                                        NSWorkspace.shared.open(WhisperModelManager.shared.modelsDirectory)
+                                    }
+                                    .buttonStyle(.link)
+                                    .font(Typography.settingsCaption)
+                                    .padding(.top, 2)
+
+                                    Text("Download the zip and extract to the models folder")
+                                        .font(Typography.settingsCaption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        } else {
+                            // Not available (quantized model)
+                            HStack {
+                                Image(systemName: "xmark.circle")
+                                    .foregroundColor(.secondary)
+                                Text("Not Available")
+                                    .font(Typography.settingsBody)
+                                    .foregroundColor(.secondary)
+                            }
+                            Text("CoreML acceleration is not available for quantized models. Select a non-quantized model to enable Neural Engine acceleration.")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
                 .padding()
                 .background(Color(.controlBackgroundColor).opacity(0.3))
@@ -684,6 +859,187 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding()
+        }
+    }
+
+    private var aboutSettings: some View {
+        Form {
+            VStack(spacing: 20) {
+                // App Info
+                VStack(spacing: 12) {
+                    if let appIcon = NSImage(named: "AppIcon") {
+                        Image(nsImage: appIcon)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 80, height: 80)
+                            .cornerRadius(16)
+                    }
+
+                    Text("OpenSuperWhisper")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+
+                    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                       let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                        Text("Version \(version) (\(build))")
+                            .font(Typography.settingsBody)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Text("Local speech-to-text transcription")
+                        .font(Typography.settingsCaption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+
+                // Dependencies
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Dependencies")
+                        .font(Typography.settingsHeader)
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        DependencyRow(name: "whisper.cpp", version: BuildInfo.whisperCppVersion, url: BuildInfo.whisperCppURL)
+                        DependencyRow(name: "GRDB.swift", version: BuildInfo.grdbVersion, url: URL(string: "https://github.com/groue/GRDB.swift"))
+                        DependencyRow(name: "KeyboardShortcuts", version: BuildInfo.keyboardShortcutsVersion, url: URL(string: "https://github.com/sindresorhus/KeyboardShortcuts"))
+                        DependencyRow(name: "autocorrect", version: BuildInfo.autocorrectVersion, url: URL(string: "https://github.com/huacnlee/autocorrect"))
+                        DependencyRow(name: "OpenMP", version: BuildInfo.libompVersion, url: URL(string: "https://www.openmp.org"))
+                    }
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Build Info
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Build Info")
+                        .font(Typography.settingsHeader)
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Build Date:")
+                                .font(Typography.settingsLabel)
+                            Spacer()
+                            Text(BuildInfo.buildDate)
+                                .font(Typography.settingsMono)
+                                .foregroundColor(.secondary)
+                        }
+
+                        HStack {
+                            Text("GPU Acceleration:")
+                                .font(Typography.settingsLabel)
+                            Spacer()
+                            Text("Metal")
+                                .font(Typography.settingsMono)
+                                .foregroundColor(.secondary)
+                        }
+
+                        HStack {
+                            Text("Platform:")
+                                .font(Typography.settingsLabel)
+                            Spacer()
+                            Text("macOS (Apple Silicon)")
+                                .font(Typography.settingsMono)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Links
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Links")
+                        .font(Typography.settingsHeader)
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Link(destination: BuildInfo.repositoryURL) {
+                            HStack {
+                                Image(systemName: "link")
+                                Text("GitHub Repository")
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .foregroundColor(.secondary)
+                            }
+                            .font(Typography.settingsBody)
+                        }
+                        .buttonStyle(.plain)
+
+                        Link(destination: BuildInfo.originalRepoURL) {
+                            HStack {
+                                Image(systemName: "tuningfork")
+                                Text("Original Repository (Starmel)")
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .foregroundColor(.secondary)
+                            }
+                            .font(Typography.settingsBody)
+                        }
+                        .buttonStyle(.plain)
+
+                        Link(destination: BuildInfo.whisperCppURL) {
+                            HStack {
+                                Image(systemName: "waveform")
+                                Text("whisper.cpp Project")
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .foregroundColor(.secondary)
+                            }
+                            .font(Typography.settingsBody)
+                        }
+                        .buttonStyle(.plain)
+
+                        Link(destination: BuildInfo.licenseURL) {
+                            HStack {
+                                Image(systemName: "doc.text")
+                                Text("MIT License")
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .foregroundColor(.secondary)
+                            }
+                            .font(Typography.settingsBody)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding()
+        }
+    }
+}
+
+// MARK: - Helper Views
+
+struct DependencyRow: View {
+    let name: String
+    let version: String
+    let url: URL?
+
+    var body: some View {
+        HStack {
+            Text(name)
+                .font(Typography.settingsLabel)
+            Spacer()
+            Text(version)
+                .font(Typography.settingsMono)
+                .foregroundColor(.secondary)
+            if let url = url {
+                Link(destination: url) {
+                    Image(systemName: "arrow.up.right.square")
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

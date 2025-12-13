@@ -10,6 +10,21 @@ project(libwhisper)
 
 option(BUILD_SHARED_LIBS "build shared libraries" OFF)
 
+# Enable Link Time Optimization for better performance
+set(GGML_LTO ON CACHE BOOL "Enable LTO" FORCE)
+
+# Configure OpenMP for Apple Silicon (Homebrew libomp)
+set(OpenMP_C_FLAGS "-Xclang -fopenmp" CACHE STRING "OpenMP C flags" FORCE)
+set(OpenMP_CXX_FLAGS "-Xclang -fopenmp" CACHE STRING "OpenMP CXX flags" FORCE)
+set(OpenMP_C_LIB_NAMES "omp" CACHE STRING "OpenMP C lib names" FORCE)
+set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "OpenMP CXX lib names" FORCE)
+set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib" CACHE FILEPATH "OpenMP library" FORCE)
+include_directories("/opt/homebrew/opt/libomp/include")
+
+# Enable CoreML for Neural Engine acceleration
+set(WHISPER_COREML ON CACHE BOOL "Enable CoreML" FORCE)
+set(WHISPER_COREML_ALLOW_FALLBACK ON CACHE BOOL "Allow fallback if CoreML fails" FORCE)
+
 # Disable i8mm/MATMUL_INT8 to fix compilation on GitHub Actions runners
 # The feature detection passes but compilation fails with the newer Xcode toolchain
 # Undefine the feature macro to prevent i8mm intrinsics from being used
