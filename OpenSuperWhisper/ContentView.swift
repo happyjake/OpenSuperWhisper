@@ -415,6 +415,18 @@ struct ContentView: View {
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView()
         }
+        .focusable()
+        .onKeyPress(.space) {
+            // Spacebar to toggle recording when app is focused
+            if viewModel.state == .idle && !viewModel.isRecording {
+                viewModel.startRecording()
+                return .handled
+            } else if viewModel.isRecording {
+                viewModel.startDecoding()
+                return .handled
+            }
+            return .ignored
+        }
     }
 }
 

@@ -17,8 +17,9 @@ class IndicatorWindowManager: IndicatorViewDelegate {
     private init() {}
     
     func show(nearPoint point: NSPoint? = nil) -> IndicatorViewModel {
-        
+
         KeyboardShortcuts.enable(.escape)
+        KeyboardShortcuts.enable(.stopRecordingSpace)
         
         // Create new view model
         let newViewModel = IndicatorViewModel()
@@ -93,6 +94,7 @@ class IndicatorWindowManager: IndicatorViewDelegate {
 
     func hide() {
         KeyboardShortcuts.disable(.escape)
+        KeyboardShortcuts.disable(.stopRecordingSpace)
         
         Task {
             guard let viewModel = self.viewModel else { return }

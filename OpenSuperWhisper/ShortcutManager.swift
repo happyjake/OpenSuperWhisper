@@ -10,6 +10,7 @@ extension KeyboardShortcuts.Name {
     // Use Cmd+Shift+Space for macOS 15+ compatibility (Option-only shortcuts no longer work)
     static let toggleRecord = Self("toggleRecord", default: .init(.space, modifiers: [.command, .shift]))
     static let escape = Self("escape", default: .init(.escape))
+    static let stopRecordingSpace = Self("stopRecordingSpace", default: .init(.space))
 }
 
 class ShortcutManager {
@@ -82,6 +83,16 @@ class ShortcutManager {
             }
         }
         KeyboardShortcuts.disable(.escape)
+
+        // Spacebar to stop recording (enabled only while recording)
+        KeyboardShortcuts.onKeyUp(for: .stopRecordingSpace) {
+            Task { @MainActor in
+                if IndicatorWindowManager.shared.isVisible {
+                    IndicatorWindowManager.shared.stopRecording()
+                }
+            }
+        }
+        KeyboardShortcuts.disable(.stopRecordingSpace)
     }
 
 }
