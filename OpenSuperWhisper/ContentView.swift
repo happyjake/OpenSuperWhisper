@@ -53,6 +53,11 @@ class ContentViewModel: ObservableObject {
         // Use shared state manager to stop recording
         // Returns nil if already stopped by another UI (e.g., floating indicator)
         guard let tempURL = stateManager.stopRecording() else {
+            // If we transitioned to .decoding but got no URL, recording was too short
+            // Reset to idle so user can try again
+            if stateManager.state == .decoding {
+                stateManager.reset()
+            }
             return
         }
 

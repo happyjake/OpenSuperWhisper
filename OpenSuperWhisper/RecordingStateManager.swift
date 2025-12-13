@@ -33,7 +33,6 @@ class RecordingStateManager: ObservableObject {
 
     func startRecording() {
         guard state == .idle else { return }
-
         state = .recording
         recordingStartTime = Date()
         recordingDuration = 0

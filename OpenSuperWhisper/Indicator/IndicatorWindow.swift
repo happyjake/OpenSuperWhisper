@@ -45,7 +45,11 @@ class IndicatorViewModel: ObservableObject {
 
     func startDecoding() {
         guard let tempURL = stateManager.stopRecording() else {
-            print("!!! Not found record url !!!")
+            // If we transitioned to .decoding but got no URL, recording was too short
+            // Reset to idle so user can try again
+            if stateManager.state == .decoding {
+                stateManager.reset()
+            }
             delegate?.didFinishDecoding()
             return
         }
@@ -57,7 +61,6 @@ class IndicatorViewModel: ObservableObject {
             guard let self = self else { return }
 
             do {
-                print("start decoding...")
                 let text = try await transcription.transcribeAudio(url: tempURL, settings: Settings())
 
                 // Create a new Recording instance
