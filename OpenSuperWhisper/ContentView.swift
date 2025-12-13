@@ -417,6 +417,12 @@ struct ContentView: View {
         }
         .focusable()
         .onKeyPress(.space) {
+            // Don't capture spacebar if a text field/editor is focused
+            if let firstResponder = NSApp.keyWindow?.firstResponder,
+               firstResponder is NSTextView || firstResponder is NSText {
+                return .ignored
+            }
+
             // Spacebar to toggle recording when app is focused
             if viewModel.state == .idle && !viewModel.isRecording {
                 viewModel.startRecording()
