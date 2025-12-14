@@ -162,6 +162,7 @@ struct RecordingIndicator: View {
 
 struct IndicatorWindow: View {
     @ObservedObject var viewModel: IndicatorViewModel
+    @StateObject private var meterService = AudioMeterService.shared
     @Environment(\.colorScheme) private var colorScheme
 
     private var backgroundColor: Color {
@@ -177,8 +178,14 @@ struct IndicatorWindow: View {
             switch viewModel.state {
             case .recording:
                 HStack(spacing: 8) {
+                    // Mini amplitude bar
+                    MiniAmplitudeBar(
+                        level: meterService.normalizedAmplitude,
+                        isClipping: meterService.isClipping
+                    )
+
                     RecordingIndicator(isBlinking: viewModel.isBlinking)
-                        .frame(width: 24)
+                        .frame(width: 16)
 
                     Text("Recording...")
                         .font(.system(size: 13, weight: .semibold))

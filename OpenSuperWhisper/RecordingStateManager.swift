@@ -44,7 +44,11 @@ class RecordingStateManager: ObservableObject {
            device.isSystemAudio {
             if #available(macOS 13.0, *) {
                 do {
+                    // Set up metering delegate before starting
+                    SystemAudioRecorder.shared.meterDelegate = AudioMeterService.shared
                     try SystemAudioRecorder.shared.startRecording()
+                    // Start metering after recording starts
+                    AudioMeterService.shared.startSystemAudioMetering()
                 } catch {
                     print("Failed to start system audio recording: \(error)")
                     reset()
@@ -56,6 +60,7 @@ class RecordingStateManager: ObservableObject {
                 }
             }
         } else {
+            // Microphone metering is started automatically by AudioRecorder
             AudioRecorder.shared.startRecording()
         }
     }
@@ -68,6 +73,9 @@ class RecordingStateManager: ObservableObject {
         state = .decoding
         stopBlinking()
         stopDurationTimer()
+
+        // Stop metering
+        AudioMeterService.shared.stopMetering()
 
         // Route to appropriate recorder based on selected source
         if let device = MicrophoneService.shared.getActiveMicrophone(),
@@ -105,6 +113,9 @@ class RecordingStateManager: ObservableObject {
         stopBlinking()
         stopDurationTimer()
 
+        // Stop metering
+        AudioMeterService.shared.stopMetering()
+
         // Route cancel to appropriate recorder
         if let device = MicrophoneService.shared.getActiveMicrophone(),
            device.isSystemAudio {
@@ -122,6 +133,10 @@ class RecordingStateManager: ObservableObject {
     func reset() {
         stopBlinking()
         stopDurationTimer()
+
+        // Stop metering
+        AudioMeterService.shared.stopMetering()
+
         state = .idle
         recordingDuration = 0
     }

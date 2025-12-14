@@ -162,9 +162,17 @@ class AudioRecorder: NSObject, ObservableObject {
         do {
             audioRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
             audioRecorder?.delegate = self
+            audioRecorder?.isMeteringEnabled = true
             audioRecorder?.record()
             isRecording = true
-            
+
+            // Start amplitude metering
+            if let recorder = audioRecorder {
+                Task { @MainActor in
+                    AudioMeterService.shared.startMicrophoneMetering(with: recorder)
+                }
+            }
+
             print("Recording started successfully")
         } catch {
             print("Failed to start recording: \(error)")

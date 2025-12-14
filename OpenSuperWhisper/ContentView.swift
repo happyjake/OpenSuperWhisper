@@ -291,7 +291,7 @@ struct ContentView: View {
                                 case .copied:
                                     CopiedButton()
                                 default:
-                                    MainRecordButton(isRecording: viewModel.isRecording)
+                                    AmplitudeRingRecordButton(state: viewModel.state)
                                 }
                             }
                             .buttonStyle(.plain)

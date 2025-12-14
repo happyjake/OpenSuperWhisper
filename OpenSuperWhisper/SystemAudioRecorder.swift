@@ -52,6 +52,11 @@ class SystemAudioRecorder: NSObject, ObservableObject, SCStreamDelegate, SCStrea
     // Temporary directory for recordings
     private let temporaryDirectory: URL
 
+    // Audio metering delegate
+    weak var meterDelegate: SystemAudioMeterDelegate?
+    private var lastMeterUpdate: CFAbsoluteTime = 0
+    private let meterUpdateInterval: CFTimeInterval = 1.0 / 60.0 // 60 Hz max
+
     private override init() {
         let tempDir = FileManager.default.temporaryDirectory
         temporaryDirectory = tempDir.appendingPathComponent("temp_recordings")
@@ -251,9 +256,36 @@ class SystemAudioRecorder: NSObject, ObservableObject, SCStreamDelegate, SCStrea
         let floatPtr = UnsafeRawPointer(data).assumingMemoryBound(to: Float.self)
         let samples = Array(UnsafeBufferPointer(start: floatPtr, count: floatCount))
 
+        // Calculate RMS and peak for metering (throttled)
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - lastMeterUpdate >= meterUpdateInterval {
+            lastMeterUpdate = now
+            let (rms, peak) = calculateRMSAndPeak(samples)
+            meterDelegate?.systemAudioRecorder(didUpdateRMS: rms, peak: peak)
+        }
+
         captureQueue.async { [weak self] in
             self?.capturedSamples.append(contentsOf: samples)
         }
+    }
+
+    /// Calculate RMS (Root Mean Square) and peak amplitude from audio samples
+    private func calculateRMSAndPeak(_ samples: [Float]) -> (rms: Float, peak: Float) {
+        guard !samples.isEmpty else { return (0, 0) }
+
+        var sumSquares: Float = 0
+        var peak: Float = 0
+
+        for sample in samples {
+            sumSquares += sample * sample
+            let absSample = abs(sample)
+            if absSample > peak {
+                peak = absSample
+            }
+        }
+
+        let rms = sqrt(sumSquares / Float(samples.count))
+        return (rms, peak)
     }
 
     // MARK: - SCStreamDelegate
