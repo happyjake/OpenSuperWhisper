@@ -512,7 +512,7 @@ struct SettingsView: View {
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                         .padding(.top, 4)
 
-                        if ["zh", "ja", "ko"].contains(viewModel.selectedLanguage) {
+                        if ["zh", "ja", "ko", "auto"].contains(viewModel.selectedLanguage) {
                             Toggle(isOn: $viewModel.useAsianAutocorrect) {
                                 Text("Use Asian Autocorrect")
                                     .font(Typography.settingsBody)

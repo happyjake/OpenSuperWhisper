@@ -255,9 +255,21 @@ class TranscriptionService: ObservableObject {
                 .replacingOccurrences(of: "[BLANK_AUDIO]", with: "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             
+            // Determine effective language for autocorrect
+            // When auto-detect is used, get the detected language from Whisper
+            let effectiveLanguage: String
+            if settings.selectedLanguage == "auto" {
+                let detectedLangId = context.fullLangId
+                effectiveLanguage = MyWhisperContext.langStr(id: detectedLangId) ?? "unknown"
+                print("TranscriptionService: Auto-detected language: \(effectiveLanguage)")
+            } else {
+                effectiveLanguage = settings.selectedLanguage
+            }
+
             // Apply Asian autocorrect if enabled and language is Chinese, Japanese, or Korean
             var processedText = cleanedText
-            if ["zh", "ja", "ko"].contains(settings.selectedLanguage) && settings.useAsianAutocorrect && !cleanedText.isEmpty {
+            if ["zh", "ja", "ko"].contains(effectiveLanguage) && settings.useAsianAutocorrect && !cleanedText.isEmpty {
+                print("TranscriptionService: Applying Asian autocorrect for language: \(effectiveLanguage)")
                 processedText = AutocorrectWrapper.format(cleanedText)
             }
             
