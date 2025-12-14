@@ -145,24 +145,48 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     private func updateStatusBarMenu() {
         let menu = NSMenu()
-        
+
         menu.addItem(NSMenuItem(title: "OpenSuperWhisper", action: #selector(openApp), keyEquivalent: "o"))
         menu.addItem(NSMenuItem.separator())
-        
-        let microphoneMenu = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+
+        let microphoneMenu = NSMenuItem(title: "Audio Source", action: nil, keyEquivalent: "")
         let submenu = NSMenu()
-        
-        let microphones = microphoneService.availableMicrophones
-        let currentMic = microphoneService.currentMicrophone
-        
-        if microphones.isEmpty {
-            let noDeviceItem = NSMenuItem(title: "No microphones available", action: nil, keyEquivalent: "")
+
+        let devices = microphoneService.availableMicrophones
+        let currentDevice = microphoneService.currentMicrophone
+
+        if devices.isEmpty {
+            let noDeviceItem = NSMenuItem(title: "No audio sources available", action: nil, keyEquivalent: "")
             noDeviceItem.isEnabled = false
             submenu.addItem(noDeviceItem)
         } else {
-            let builtInMicrophones = microphones.filter { $0.isBuiltIn }
-            let externalMicrophones = microphones.filter { !$0.isBuiltIn }
-            
+            let systemAudioDevices = devices.filter { $0.isSystemAudio }
+            let builtInMicrophones = devices.filter { $0.isBuiltIn && !$0.isSystemAudio }
+            let externalMicrophones = devices.filter { !$0.isBuiltIn && !$0.isSystemAudio }
+
+            // System Audio section
+            for device in systemAudioDevices {
+                let item = NSMenuItem(
+                    title: device.displayName,
+                    action: #selector(selectMicrophone(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = device
+                item.image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "System Audio")
+
+                if let current = currentDevice, current.id == device.id {
+                    item.state = .on
+                }
+
+                submenu.addItem(item)
+            }
+
+            if !systemAudioDevices.isEmpty && (!builtInMicrophones.isEmpty || !externalMicrophones.isEmpty) {
+                submenu.addItem(NSMenuItem.separator())
+            }
+
+            // Built-in microphones
             for microphone in builtInMicrophones {
                 let item = NSMenuItem(
                     title: microphone.displayName,
@@ -171,18 +195,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 )
                 item.target = self
                 item.representedObject = microphone
-                
-                if let current = currentMic, current.id == microphone.id {
+                item.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Microphone")
+
+                if let current = currentDevice, current.id == microphone.id {
                     item.state = .on
                 }
-                
+
                 submenu.addItem(item)
             }
-            
+
             if !builtInMicrophones.isEmpty && !externalMicrophones.isEmpty {
                 submenu.addItem(NSMenuItem.separator())
             }
-            
+
+            // External microphones
             for microphone in externalMicrophones {
                 let item = NSMenuItem(
                     title: microphone.displayName,
@@ -191,21 +217,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 )
                 item.target = self
                 item.representedObject = microphone
-                
-                if let current = currentMic, current.id == microphone.id {
+                item.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Microphone")
+
+                if let current = currentDevice, current.id == microphone.id {
                     item.state = .on
                 }
-                
+
                 submenu.addItem(item)
             }
         }
-        
+
         microphoneMenu.submenu = submenu
         menu.addItem(microphoneMenu)
-        
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
-        
+
         statusItem?.menu = menu
     }
     

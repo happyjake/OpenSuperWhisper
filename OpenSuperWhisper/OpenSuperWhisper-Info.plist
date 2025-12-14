@@ -8,6 +8,8 @@
 	<string>14.0</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>OpenSuperWhisper needs microphone access to record audio for transcription.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>OpenSuperWhisper needs system audio access to transcribe media playing on your Mac.</string>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>OpenSuperWhisper needs accessibility access to position the recording indicator near your text cursor. This is optional - the app works without it.</string>
 	<key>NSAppleEventsUsageDescription</key>

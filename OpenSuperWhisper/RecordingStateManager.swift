@@ -39,7 +39,25 @@ class RecordingStateManager: ObservableObject {
         startBlinking()
         startDurationTimer()
 
-        AudioRecorder.shared.startRecording()
+        // Route to appropriate recorder based on selected source
+        if let device = MicrophoneService.shared.getActiveMicrophone(),
+           device.isSystemAudio {
+            if #available(macOS 13.0, *) {
+                do {
+                    try SystemAudioRecorder.shared.startRecording()
+                } catch {
+                    print("Failed to start system audio recording: \(error)")
+                    reset()
+                    NotificationCenter.default.post(
+                        name: .systemAudioRecordingFailed,
+                        object: nil,
+                        userInfo: ["error": error]
+                    )
+                }
+            }
+        } else {
+            AudioRecorder.shared.startRecording()
+        }
     }
 
     /// Stop recording and transition to decoding state.
@@ -51,7 +69,16 @@ class RecordingStateManager: ObservableObject {
         stopBlinking()
         stopDurationTimer()
 
-        return AudioRecorder.shared.stopRecording()
+        // Route to appropriate recorder based on selected source
+        if let device = MicrophoneService.shared.getActiveMicrophone(),
+           device.isSystemAudio {
+            if #available(macOS 13.0, *) {
+                return SystemAudioRecorder.shared.stopRecording()
+            }
+            return nil
+        } else {
+            return AudioRecorder.shared.stopRecording()
+        }
     }
 
     /// Called after transcription completes.
@@ -77,7 +104,17 @@ class RecordingStateManager: ObservableObject {
     func cancel() {
         stopBlinking()
         stopDurationTimer()
-        AudioRecorder.shared.cancelRecording()
+
+        // Route cancel to appropriate recorder
+        if let device = MicrophoneService.shared.getActiveMicrophone(),
+           device.isSystemAudio {
+            if #available(macOS 13.0, *) {
+                SystemAudioRecorder.shared.cancelRecording()
+            }
+        } else {
+            AudioRecorder.shared.cancelRecording()
+        }
+
         state = .idle
     }
 

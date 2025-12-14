@@ -49,16 +49,12 @@ class TranscriptionService: ObservableObject {
         if let modelPath = AppPreferences.shared.selectedModelPath {
             isLoading = true
             
-            // Capture the weak self reference before the task
-            weak var weakSelf = self
-            
-            Task.detached(priority: .userInitiated) {
+            Task.detached(priority: .userInitiated) { [weak self] in
                 let params = WhisperContextParams()
                 let newContext = MyWhisperContext.initFromFile(path: modelPath, params: params)
-                
-                await MainActor.run {
-                    // Use the weak self reference inside MainActor.run
-                    guard let self = weakSelf else { return }
+
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
                     self.context = newContext
                     self.isLoading = false
                     print("Model loaded")
@@ -70,17 +66,13 @@ class TranscriptionService: ObservableObject {
     func reloadModel(with path: String) {
         print("Reloading model")
         isLoading = true
-        
-        // Capture the weak self reference before the task
-        weak var weakSelf = self
-        
-        Task.detached(priority: .userInitiated) {
+
+        Task.detached(priority: .userInitiated) { [weak self] in
             let params = WhisperContextParams()
             let newContext = MyWhisperContext.initFromFile(path: path, params: params)
-            
-            await MainActor.run {
-                // Use the weak self reference inside MainActor.run
-                guard let self = weakSelf else { return }
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
                 self.context = newContext
                 self.isLoading = false
                 print("Model reloaded")

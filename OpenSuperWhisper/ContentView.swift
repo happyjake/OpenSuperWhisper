@@ -18,6 +18,7 @@ class ContentViewModel: ObservableObject {
     @Published var transcriptionService = TranscriptionService.shared
     @Published var recordingStore = RecordingStore.shared
     @Published var microphoneService = MicrophoneService.shared
+    @Published var permissionsManager = PermissionsManager()
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -344,7 +345,7 @@ struct ContentView: View {
 
                                 // Right: controls
                                 HStack(spacing: 8) {
-                                    MicrophonePickerIconView(microphoneService: viewModel.microphoneService)
+                                    MicrophonePickerIconView(microphoneService: viewModel.microphoneService, permissionsManager: viewModel.permissionsManager)
 
                                     if !viewModel.recordingStore.recordings.isEmpty {
                                         Button(action: {
@@ -829,85 +830,184 @@ struct TranscriptionDetailView: View {
 
 struct MicrophonePickerIconView: View {
     @ObservedObject var microphoneService: MicrophoneService
+    @ObservedObject var permissionsManager: PermissionsManager
     @State private var showMenu = false
-    
+
+    private var systemAudioDevices: [MicrophoneService.AudioDevice] {
+        microphoneService.availableMicrophones.filter { $0.isSystemAudio }
+    }
+
     private var builtInMicrophones: [MicrophoneService.AudioDevice] {
-        microphoneService.availableMicrophones.filter { $0.isBuiltIn }
+        microphoneService.availableMicrophones.filter { $0.isBuiltIn && !$0.isSystemAudio }
     }
-    
+
     private var externalMicrophones: [MicrophoneService.AudioDevice] {
-        microphoneService.availableMicrophones.filter { !$0.isBuiltIn }
+        microphoneService.availableMicrophones.filter { !$0.isBuiltIn && !$0.isSystemAudio }
     }
-    
+
+    private var iconName: String {
+        if microphoneService.availableMicrophones.isEmpty {
+            return "mic.slash"
+        }
+        if microphoneService.currentMicrophone?.isSystemAudio == true {
+            return "speaker.wave.2.fill"
+        }
+        return "mic.fill"
+    }
+
+    /// Show warning indicator if system audio is selected but permission is missing
+    private var showPermissionWarning: Bool {
+        microphoneService.currentMicrophone?.isSystemAudio == true &&
+        !permissionsManager.isSystemAudioPermissionGranted
+    }
+
     var body: some View {
         Button(action: {
             showMenu.toggle()
         }) {
-            Image(systemName: microphoneService.availableMicrophones.isEmpty ? "mic.slash" : "mic.fill")
-                .font(.title3)
-                .foregroundColor(.secondary)
-                .frame(width: 32, height: 32)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: iconName)
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+
+                // Warning badge when permission is missing
+                if showPermissionWarning {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                        .offset(x: 4, y: -4)
+                }
+            }
         }
         .buttonStyle(.plain)
-        .help(microphoneService.currentMicrophone?.displayName ?? "Select microphone")
+        .help(showPermissionWarning
+              ? "System audio permission required"
+              : (microphoneService.currentMicrophone?.displayName ?? "Select audio source"))
         .popover(isPresented: $showMenu, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 0) {
                 if microphoneService.availableMicrophones.isEmpty {
-                    Text("No microphones available")
+                    Text("No audio sources available")
                         .foregroundColor(.secondary)
                         .padding()
                 } else {
-                    ForEach(builtInMicrophones) { microphone in
-                        Button(action: {
-                            microphoneService.selectMicrophone(microphone)
-                            showMenu = false
-                        }) {
-                            HStack {
-                                Text(microphone.displayName)
-                                Spacer()
-                                if let current = microphoneService.currentMicrophone,
-                                   current.id == microphone.id {
-                                    Image(systemName: "checkmark")
-                                }
+                    // System Audio section
+                    ForEach(systemAudioDevices) { device in
+                        systemAudioSourceButton(for: device)
+                    }
+
+                    // Permission warning and settings button
+                    if !systemAudioDevices.isEmpty && !permissionsManager.isSystemAudioPermissionGranted {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                                Text("Permission required")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
+
+                            Button(action: {
+                                permissionsManager.openSystemPreferences(for: .systemAudio)
+                                showMenu = false
+                            }) {
+                                HStack {
+                                    Image(systemName: "gear")
+                                        .frame(width: 16)
+                                    Text("Open System Settings")
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.accentColor)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.bottom, 4)
                     }
-                    
+
+                    if !systemAudioDevices.isEmpty && (!builtInMicrophones.isEmpty || !externalMicrophones.isEmpty) {
+                        Divider()
+                            .padding(.vertical, 4)
+                    }
+
+                    // Built-in microphones
+                    ForEach(builtInMicrophones) { microphone in
+                        audioSourceButton(for: microphone, icon: "mic.fill")
+                    }
+
                     if !builtInMicrophones.isEmpty && !externalMicrophones.isEmpty {
                         Divider()
                             .padding(.vertical, 4)
                     }
-                    
+
+                    // External microphones
                     ForEach(externalMicrophones) { microphone in
-                        Button(action: {
-                            microphoneService.selectMicrophone(microphone)
-                            showMenu = false
-                        }) {
-                            HStack {
-                                Text(microphone.displayName)
-                                Spacer()
-                                if let current = microphoneService.currentMicrophone,
-                                   current.id == microphone.id {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        audioSourceButton(for: microphone, icon: "mic.fill")
                     }
                 }
             }
-            .frame(minWidth: 200)
+            .frame(minWidth: 220)
             .padding(.vertical, 8)
         }
+    }
+
+    @ViewBuilder
+    private func systemAudioSourceButton(for device: MicrophoneService.AudioDevice) -> some View {
+        Button(action: {
+            microphoneService.selectMicrophone(device)
+            showMenu = false
+        }) {
+            HStack {
+                Image(systemName: "speaker.wave.2.fill")
+                    .frame(width: 16)
+                    .foregroundColor(.secondary)
+                Text(device.displayName)
+                Spacer()
+                if !permissionsManager.isSystemAudioPermissionGranted {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                if let current = microphoneService.currentMicrophone,
+                   current.id == device.id {
+                    Image(systemName: "checkmark")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func audioSourceButton(for device: MicrophoneService.AudioDevice, icon: String) -> some View {
+        Button(action: {
+            microphoneService.selectMicrophone(device)
+            showMenu = false
+        }) {
+            HStack {
+                Image(systemName: icon)
+                    .frame(width: 16)
+                    .foregroundColor(.secondary)
+                Text(device.displayName)
+                Spacer()
+                if let current = microphoneService.currentMicrophone,
+                   current.id == device.id {
+                    Image(systemName: "checkmark")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

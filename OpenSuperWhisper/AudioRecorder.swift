@@ -69,7 +69,21 @@ class AudioRecorder: NSObject, ObservableObject {
     }
     
     private func updateCanRecordStatus() {
-        canRecord = MicrophoneService.shared.getActiveMicrophone() != nil
+        guard let device = MicrophoneService.shared.getActiveMicrophone() else {
+            canRecord = false
+            return
+        }
+
+        if device.isSystemAudio {
+            // System audio capture requires macOS 13.0+ (ScreenCaptureKit)
+            if #available(macOS 13.0, *) {
+                canRecord = true
+            } else {
+                canRecord = false
+            }
+        } else {
+            canRecord = true
+        }
     }
     
     private func createTemporaryDirectoryIfNeeded() {

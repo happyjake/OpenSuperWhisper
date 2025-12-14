@@ -2,6 +2,7 @@ import AVFoundation
 import Foundation
 import Combine
 import CoreAudio
+import CoreGraphics
 
 class MicrophoneService: ObservableObject {
     static let shared = MicrophoneService()
@@ -13,18 +14,39 @@ class MicrophoneService: ObservableObject {
     private var deviceChangeObserver: Any?
     private var timer: Timer?
     
+    enum AudioSourceType: String, Codable {
+        case microphone
+        case systemAudio
+    }
+
     struct AudioDevice: Identifiable, Equatable, Codable {
         let id: String
         let name: String
         let manufacturer: String?
         let isBuiltIn: Bool
-        
+        let sourceType: AudioSourceType
+
         static func == (lhs: AudioDevice, rhs: AudioDevice) -> Bool {
             return lhs.id == rhs.id
         }
-        
+
         var displayName: String {
             return name
+        }
+
+        var isSystemAudio: Bool {
+            return sourceType == .systemAudio
+        }
+
+        /// Factory for system audio virtual device
+        static var systemAudioDevice: AudioDevice {
+            AudioDevice(
+                id: "com.opensuperwhisper.system-audio",
+                name: "System Audio",
+                manufacturer: nil,
+                isBuiltIn: false,
+                sourceType: .systemAudio
+            )
         }
     }
     
@@ -67,20 +89,28 @@ class MicrophoneService: ObservableObject {
     }
     
     func refreshAvailableMicrophones() {
+        var devices: [AudioDevice] = []
+
+        // Add system audio option first (macOS 13.0+ with ScreenCaptureKit)
+        if #available(macOS 13.0, *) {
+            devices.append(.systemAudioDevice)
+        }
+
+        // Get microphone devices
         let deviceTypes: [AVCaptureDevice.DeviceType]
         if #available(macOS 14.0, *) {
             deviceTypes = [.microphone, .external]
         } else {
             deviceTypes = [.microphone, .external, .builtInMicrophone]
         }
-        
+
         let discoverySession = AVCaptureDevice.DiscoverySession(
             deviceTypes: deviceTypes,
             mediaType: .audio,
             position: .unspecified
         )
-        
-        availableMicrophones = discoverySession.devices
+
+        let microphoneDevices = discoverySession.devices
             .filter { device in
                 !device.uniqueID.contains("CADefaultDeviceAggregate")
             }
@@ -90,10 +120,14 @@ class MicrophoneService: ObservableObject {
                     id: device.uniqueID,
                     name: device.localizedName,
                     manufacturer: device.manufacturer,
-                    isBuiltIn: isBuiltIn
+                    isBuiltIn: isBuiltIn,
+                    sourceType: .microphone
                 )
             }
-        
+
+        devices.append(contentsOf: microphoneDevices)
+        availableMicrophones = devices
+
         if availableMicrophones.isEmpty {
             selectedMicrophone = nil
             currentMicrophone = nil
@@ -152,17 +186,27 @@ class MicrophoneService: ObservableObject {
     }
     
     func getDefaultMicrophone() -> AudioDevice? {
-        if let builtIn = availableMicrophones.first(where: { $0.isBuiltIn }) {
+        // Default to built-in microphone, not system audio
+        if let builtIn = availableMicrophones.first(where: { $0.isBuiltIn && !$0.isSystemAudio }) {
             return builtIn
         }
-        return availableMicrophones.first
+        // Fallback to any microphone (not system audio)
+        return availableMicrophones.first(where: { !$0.isSystemAudio })
     }
     
     func selectMicrophone(_ device: AudioDevice) {
         selectedMicrophone = device
         saveMicrophone(device)
         updateCurrentMicrophone()
-        
+
+        // If selecting system audio, trigger permission request immediately
+        // This adds the app to the permission list so user just needs to toggle it ON
+        if device.isSystemAudio {
+            if !CGPreflightScreenCaptureAccess() {
+                CGRequestScreenCaptureAccess()
+            }
+        }
+
         NotificationCenter.default.post(
             name: .microphoneDidChange,
             object: nil,
@@ -285,5 +329,8 @@ class MicrophoneService: ObservableObject {
 
 extension Notification.Name {
     static let microphoneDidChange = Notification.Name("microphoneDidChange")
+    static let systemAudioRecordingFailed = Notification.Name("systemAudioRecordingFailed")
+    static let systemAudioPermissionDenied = Notification.Name("systemAudioPermissionDenied")
+    static let systemAudioPermissionGranted = Notification.Name("systemAudioPermissionGranted")
 }
 
