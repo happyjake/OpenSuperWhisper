@@ -39,6 +39,7 @@ struct OpenSuperWhisperApp: App {
     init() {
         _ = ShortcutManager.shared
         _ = MicrophoneService.shared
+        _ = TranscriptionService.shared  // Start loading model immediately
         WhisperModelManager.shared.ensureDefaultModelPresent()
     }
 }

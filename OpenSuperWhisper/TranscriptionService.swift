@@ -16,6 +16,9 @@ class TranscriptionService: ObservableObject {
     private var transcriptionTask: Task<String, Error>? = nil
     private var isCancelled = false
     private var abortFlag: UnsafeMutablePointer<Bool>? = nil
+
+    // Waiters for model loading completion
+    private var modelLoadedWaiters: [CheckedContinuation<Void, Never>] = []
     
     init() {
         loadModel()
@@ -43,12 +46,37 @@ class TranscriptionService: ObservableObject {
         // Free the abort flag if it exists
         abortFlag?.deallocate()
     }
-    
+
+    /// Wait for model to be loaded. Returns immediately if already loaded.
+    func waitForModelReady() async {
+        // If model is already loaded, return immediately
+        if context != nil && !isLoading {
+            return
+        }
+
+        // Wait for model to finish loading
+        await withCheckedContinuation { continuation in
+            // Double-check in case model loaded while we were setting up
+            if context != nil && !isLoading {
+                continuation.resume()
+            } else {
+                modelLoadedWaiters.append(continuation)
+            }
+        }
+    }
+
+    private func resumeModelWaiters() {
+        for waiter in modelLoadedWaiters {
+            waiter.resume()
+        }
+        modelLoadedWaiters.removeAll()
+    }
+
     private func loadModel() {
         print("Loading model")
         if let modelPath = AppPreferences.shared.selectedModelPath {
             isLoading = true
-            
+
             Task.detached(priority: .userInitiated) { [weak self] in
                 let params = WhisperContextParams()
                 let newContext = MyWhisperContext.initFromFile(path: modelPath, params: params)
@@ -57,9 +85,13 @@ class TranscriptionService: ObservableObject {
                     guard let self else { return }
                     self.context = newContext
                     self.isLoading = false
+                    self.resumeModelWaiters()
                     print("Model loaded")
                 }
             }
+        } else {
+            // No model path - resume waiters anyway so they don't hang forever
+            resumeModelWaiters()
         }
     }
     
@@ -75,19 +107,23 @@ class TranscriptionService: ObservableObject {
                 guard let self else { return }
                 self.context = newContext
                 self.isLoading = false
+                self.resumeModelWaiters()
                 print("Model reloaded")
             }
         }
     }
     
     func transcribeAudio(url: URL, settings: Settings) async throws -> String {
+        // Wait for model to be ready before starting transcription
+        await waitForModelReady()
+
         await MainActor.run {
             self.progress = 0.0
             self.isTranscribing = true
             self.transcribedText = ""
             self.currentSegment = ""
             self.isCancelled = false
-            
+
             // Initialize a new abort flag and set it to false
             if self.abortFlag != nil {
                 self.abortFlag?.deallocate()

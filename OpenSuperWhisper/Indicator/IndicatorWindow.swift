@@ -163,6 +163,8 @@ struct RecordingIndicator: View {
 struct IndicatorWindow: View {
     @ObservedObject var viewModel: IndicatorViewModel
     @StateObject private var meterService = AudioMeterService.shared
+    @ObservedObject private var transcriptionService = TranscriptionService.shared
+    @ObservedObject private var microphoneService = MicrophoneService.shared
     @Environment(\.colorScheme) private var colorScheme
 
     private var backgroundColor: Color {
@@ -178,6 +180,11 @@ struct IndicatorWindow: View {
             switch viewModel.state {
             case .recording:
                 HStack(spacing: 8) {
+                    // Source indicator (minimal)
+                    Text(microphoneService.currentMicrophone?.isSystemAudio == true ? "SYS" : "MIC")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(.secondary)
+
                     // Mini amplitude bar
                     MiniAmplitudeBar(
                         level: meterService.normalizedAmplitude,
@@ -212,10 +219,10 @@ struct IndicatorWindow: View {
             case .decoding:
                 HStack(spacing: 8) {
                     ProgressView()
-                        .scaleEffect(0.7)
+                        .controlSize(.small)
                         .frame(width: 24)
 
-                    Text("Transcribing...")
+                    Text(transcriptionService.isLoading ? "Loading model..." : "Transcribing...")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -248,7 +255,7 @@ struct IndicatorWindow: View {
                 .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
         }
         .clipShape(rect)
-        .frame(width: 200)
+        .frame(width: 220)
         .scaleEffect(viewModel.isVisible ? 1 : 0.5)
         .offset(y: viewModel.isVisible ? 0 : 20)
         .opacity(viewModel.isVisible ? 1 : 0)
