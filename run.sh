@@ -95,6 +95,11 @@ fi
 if [[ $? -eq 0 ]] && [[ ! "$BUILD_OUTPUT" =~ "BUILD FAILED" ]]; then
     APP_PATH="./Build/Build/Products/$BUILD_CONFIG/OpenSuperWhisper.app"
     echo "App built successfully!"
+
+    # Ad-hoc sign the app bundle (required for Release builds to run)
+    echo "Ad-hoc signing app bundle..."
+    codesign --force --deep --sign - "$APP_PATH"
+
     echo "Location: $APP_PATH"
     if $JUST_BUILD; then
         exit 0
