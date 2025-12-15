@@ -310,218 +310,104 @@ struct SettingsView: View {
     private var modelSettings: some View {
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Whisper Model")
-                        .font(Typography.settingsHeader)
-                        .foregroundColor(.primary)
+                // Unified Model List
+                VStack(spacing: 8) {
+                    ForEach(availableModels) { model in
+                        let isActive = viewModel.selectedModelURL?.lastPathComponent == model.filename
+                        let coreMLState = isActive ? getCoreMLState(for: model) : nil
 
-                    Picker("Model", selection: $viewModel.selectedModelURL) {
-                        ForEach(viewModel.availableModels, id: \.self) { url in
-                            Text(url.lastPathComponent)
-                                .tag(url as URL?)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(.controlBackgroundColor))
-                    .cornerRadius(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Models Directory:")
-                                .font(Typography.settingsLabel)
-                            Spacer()
-                            Button(action: {
-                                NSWorkspace.shared.open(WhisperModelManager.shared.modelsDirectory)
-                            }) {
-                                Label("Open Folder", systemImage: "folder")
-                                    .font(Typography.settingsLabel)
+                        ModelCardView(
+                            model: model,
+                            modelManager: modelManager,
+                            isActive: isActive,
+                            coreMLState: coreMLState,
+                            onSelect: {
+                                selectModel(model)
+                            },
+                            onDownload: {
+                                downloadModel(model)
+                            },
+                            onCancelDownload: {
+                                modelManager.cancelDownload(for: model.filename)
+                            },
+                            onDownloadCoreML: {
+                                viewModel.downloadCoreML()
+                            },
+                            onCancelCoreML: { deleteResumeData in
+                                viewModel.cancelCoreMLDownload(deleteResumeData: deleteResumeData)
+                            },
+                            onDeleteCoreML: {
+                                viewModel.deleteCoreML()
                             }
-                            .buttonStyle(.borderless)
-                            .help("Open models directory")
-                        }
-                        Text(WhisperModelManager.shared.modelsDirectory.path)
-                            .font(Typography.settingsMono)
-                            .foregroundColor(.secondary)
-                            .textSelection(.enabled)
-                            .padding(8)
-                            .background(Color(.textBackgroundColor).opacity(0.5))
-                            .cornerRadius(6)
-                    }
-                    .padding(.top, 8)
-
-                }
-                .padding()
-                .background(Color(.controlBackgroundColor).opacity(0.3))
-                .cornerRadius(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // Download Models Section
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Download Models")
-                        .font(Typography.settingsHeader)
-                        .foregroundColor(.primary)
-
-                    VStack(spacing: 8) {
-                        ForEach(availableModels) { model in
-                            ModelRowView(
-                                model: model,
-                                modelManager: modelManager,
-                                onDownload: {
-                                    downloadModel(model)
-                                },
-                                onCancel: {
-                                    modelManager.cancelDownload(for: model.filename)
-                                }
-                            )
-                        }
+                        )
                     }
                 }
-                .padding()
-                .background(Color(.controlBackgroundColor).opacity(0.3))
-                .cornerRadius(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .alert("Download Error", isPresented: $showDownloadError) {
                     Button("OK", role: .cancel) {}
                 } message: {
                     Text(downloadErrorMessage)
                 }
 
-                // CoreML Acceleration Section
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Neural Engine Acceleration")
-                        .font(Typography.settingsHeader)
-                        .foregroundColor(.primary)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        if modelManager.isCoreMLDownloading {
-                            // Downloading state
-                            HStack(spacing: 12) {
-                                ProgressView(value: modelManager.coreMLDownloadProgress)
-                                    .frame(width: 120)
-                                Text("\(Int(modelManager.coreMLDownloadProgress * 100))%")
-                                    .font(Typography.settingsBody)
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 40)
-                                Spacer()
-                                Button("Cancel") {
-                                    viewModel.cancelCoreMLDownload(deleteResumeData: false)
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                            Text("Downloading CoreML encoder...")
-                                .font(Typography.settingsCaption)
-                                .foregroundColor(.secondary)
-                        } else if viewModel.hasCoreMLModel() {
-                            // Downloaded state
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                Text("CoreML Enabled")
-                                    .font(Typography.settingsBody)
-                                Spacer()
-                                Button("Delete") {
-                                    viewModel.deleteCoreML()
-                                }
-                                .buttonStyle(.bordered)
-                                .foregroundColor(.red)
-                            }
-                            Text("Transcription uses Apple Neural Engine for faster processing")
-                                .font(Typography.settingsCaption)
-                                .foregroundColor(.secondary)
-                        } else if viewModel.hasCoreMLResumableDownload() {
-                            // Paused/resumable download state
-                            HStack(spacing: 12) {
-                                Image(systemName: "arrow.clockwise.circle")
-                                    .foregroundColor(.blue)
-                                Text("Download Paused (\(Int(viewModel.getCoreMLResumableProgress() * 100))%)")
-                                    .font(Typography.settingsBody)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button("Resume") {
-                                    viewModel.downloadCoreML()
-                                }
-                                .buttonStyle(.borderedProminent)
-                                Button {
-                                    viewModel.cancelCoreMLDownload(deleteResumeData: true)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.red.opacity(0.8))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Cancel and restart from beginning")
-                            }
-                            Text("Tap Resume to continue downloading CoreML encoder")
-                                .font(Typography.settingsCaption)
-                                .foregroundColor(.secondary)
-                        } else if viewModel.isCoreMLAvailable() {
-                            // Available but not downloaded
-                            HStack {
-                                Image(systemName: "arrow.down.circle")
-                                    .foregroundColor(.secondary)
-                                Text("Not Downloaded")
-                                    .font(Typography.settingsBody)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button("Download") {
-                                    viewModel.downloadCoreML()
-                                }
-                                .buttonStyle(.borderedProminent)
-                            }
-                            Text("Download CoreML encoder for ~1.5-2x faster transcription")
-                                .font(Typography.settingsCaption)
-                                .foregroundColor(.secondary)
-
-                            // Manual download instructions
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Manual download:")
-                                    .font(Typography.settingsCaption)
-                                    .foregroundColor(.secondary)
-                                    .padding(.top, 8)
-
-                                if let modelName = viewModel.selectedModelURL?.lastPathComponent {
-                                    let baseName = modelName.replacingOccurrences(of: ".bin", with: "")
-                                    let downloadURL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(baseName)-encoder.mlmodelc.zip"
-                                    Link(downloadURL, destination: URL(string: downloadURL)!)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundColor(.blue)
-
-                                    Button("Show Models Folder") {
-                                        NSWorkspace.shared.open(WhisperModelManager.shared.modelsDirectory)
-                                    }
-                                    .buttonStyle(.link)
-                                    .font(Typography.settingsCaption)
-                                    .padding(.top, 2)
-
-                                    Text("Download the zip and extract to the models folder")
-                                        .font(Typography.settingsCaption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        } else {
-                            // Not available (quantized model)
-                            HStack {
-                                Image(systemName: "xmark.circle")
-                                    .foregroundColor(.secondary)
-                                Text("Not Available")
-                                    .font(Typography.settingsBody)
-                                    .foregroundColor(.secondary)
-                            }
-                            Text("CoreML acceleration is not available for quantized models. Select a non-quantized model to enable Neural Engine acceleration.")
-                                .font(Typography.settingsCaption)
-                                .foregroundColor(.secondary)
-                        }
+                // Models Directory Footer
+                HStack {
+                    Text("Models stored in:")
+                        .font(Typography.settingsCaption)
+                        .foregroundColor(.secondary)
+                    Text(WhisperModelManager.shared.modelsDirectory.path)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button(action: {
+                        NSWorkspace.shared.open(WhisperModelManager.shared.modelsDirectory)
+                    }) {
+                        Label("Open", systemImage: "folder")
+                            .font(Typography.settingsCaption)
                     }
+                    .buttonStyle(.borderless)
+                    .help("Open models directory")
                 }
-                .padding()
-                .background(Color(.controlBackgroundColor).opacity(0.3))
-                .cornerRadius(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 12)
+                .padding(.horizontal, 4)
             }
         }
         .padding()
+    }
+
+    private func getCoreMLState(for model: DownloadableModel) -> CoreMLState {
+        let modelName = model.filename
+
+        // Check if quantized
+        let quantizedSuffixes = ["-q5_0.bin", "-q5_1.bin", "-q8_0.bin"]
+        for suffix in quantizedSuffixes {
+            if modelName.contains(suffix) {
+                return .notAvailable
+            }
+        }
+
+        // Check if downloading
+        if modelManager.isCoreMLDownloading {
+            return .downloading(progress: modelManager.coreMLDownloadProgress)
+        }
+
+        // Check if enabled
+        if WhisperModelManager.shared.hasCoreMLModel(for: modelName) {
+            return .enabled
+        }
+
+        // Check if resumable
+        if WhisperModelManager.shared.hasCoreMLResumableDownload(for: modelName) {
+            let progress = WhisperModelManager.shared.getCoreMLResumableDownload(for: modelName)?.progress ?? 0
+            return .resumable(progress: progress)
+        }
+
+        return .available
+    }
+
+    private func selectModel(_ model: DownloadableModel) {
+        let modelPath = WhisperModelManager.shared.modelsDirectory.appendingPathComponent(model.filename)
+        viewModel.selectedModelURL = modelPath
     }
     
     private var transcriptionSettings: some View {
