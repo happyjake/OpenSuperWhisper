@@ -32,8 +32,22 @@ struct OpenSuperWhisperApp: App {
         .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings...") {
+                    NSApp.sendAction(#selector(AppDelegate.openSettings), to: nil, from: nil)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
         .handlesExternalEvents(matching: Set(arrayLiteral: "openMainWindow"))
+
+        Window("Settings", id: "settings") {
+            SettingsView(initialTab: 0)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultSize(width: 550, height: 700)
+        .handlesExternalEvents(matching: Set(arrayLiteral: "settings"))
     }
 
     init() {
@@ -111,6 +125,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
             case "openMainWindow":
                 showMainWindow()
+
+            case "settings":
+                // Find and show Settings window, or it will be created by the Window scene
+                for window in NSApplication.shared.windows {
+                    if window.title == "Settings" {
+                        window.makeKeyAndOrderFront(nil)
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                        return
+                    }
+                }
+                // Window not found - this shouldn't happen as SwiftUI manages Window scenes
+                // but we can trigger it via environment if needed
 
             default:
                 print("Unknown URL command: \(url.host ?? "nil")")
@@ -254,7 +280,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
     }
-    
+
+    @objc func openSettings() {
+        // Open the settings window using URL scheme
+        if let url = URL(string: "opensuperwhisper://settings") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     func showMainWindow() {
         NSApplication.shared.setActivationPolicy(.regular)
         

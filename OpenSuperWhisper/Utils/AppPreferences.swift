@@ -74,4 +74,24 @@ final class AppPreferences {
     
     @OptionalUserDefault(key: "selectedMicrophoneData")
     var selectedMicrophoneData: Data?
+
+    // Language-specific initial prompts storage
+    @OptionalUserDefault(key: "languagePromptsData")
+    var languagePromptsData: Data?
+
+    // Computed property for type-safe access to language prompts
+    var languagePrompts: [String: String] {
+        get {
+            guard let data = languagePromptsData,
+                  let prompts = try? JSONDecoder().decode([String: String].self, from: data) else {
+                return [:]
+            }
+            return prompts
+        }
+        set {
+            if let encoded = try? JSONEncoder().encode(newValue) {
+                languagePromptsData = encoded
+            }
+        }
+    }
 }

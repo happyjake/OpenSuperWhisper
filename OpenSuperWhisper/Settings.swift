@@ -6,6 +6,13 @@ import Foundation
 import KeyboardShortcuts
 import SwiftUI
 
+/// Shared navigation state for Settings window
+class SettingsNavigation: ObservableObject {
+    static let shared = SettingsNavigation()
+    @Published var initialTab: Int = 0
+    private init() {}
+}
+
 class SettingsViewModel: ObservableObject {
     @Published var selectedModelURL: URL? {
         didSet {
@@ -52,10 +59,43 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
-    @Published var initialPrompt: String {
+    @Published var languagePrompts: [String: String] {
         didSet {
-            AppPreferences.shared.initialPrompt = initialPrompt
+            AppPreferences.shared.languagePrompts = languagePrompts
         }
+    }
+
+    /// Which language's prompt is being edited (used in auto-detect mode)
+    @Published var editingPromptLanguage: String = "en"
+
+    /// Computed property for the currently displayed/edited prompt text
+    var currentEditingPrompt: String {
+        get {
+            let lang = selectedLanguage == "auto" ? editingPromptLanguage : selectedLanguage
+            if let userPrompt = languagePrompts[lang], !userPrompt.isEmpty {
+                return userPrompt
+            }
+            return LanguageUtil.defaultPrompts[lang] ?? ""
+        }
+        set {
+            let lang = selectedLanguage == "auto" ? editingPromptLanguage : selectedLanguage
+            var prompts = languagePrompts
+            prompts[lang] = newValue
+            languagePrompts = prompts
+        }
+    }
+
+    /// Check if current prompt is customized (different from default)
+    var isCurrentPromptCustomized: Bool {
+        let lang = selectedLanguage == "auto" ? editingPromptLanguage : selectedLanguage
+        return LanguageUtil.isCustomPrompt(for: lang, userPrompts: languagePrompts)
+    }
+
+    /// Reset a specific language's prompt to its default
+    func resetPromptToDefault(for language: String) {
+        var prompts = languagePrompts
+        prompts.removeValue(forKey: language)
+        languagePrompts = prompts
     }
 
     @Published var useBeamSearch: Bool {
@@ -110,13 +150,23 @@ class SettingsViewModel: ObservableObject {
         self.showTimestamps = prefs.showTimestamps
         self.temperature = prefs.temperature
         self.noSpeechThreshold = prefs.noSpeechThreshold
-        self.initialPrompt = prefs.initialPrompt
         self.useBeamSearch = prefs.useBeamSearch
         self.beamSize = prefs.beamSize
         self.debugMode = prefs.debugMode
         self.playSoundOnRecordStart = prefs.playSoundOnRecordStart
         self.useAsianAutocorrect = prefs.useAsianAutocorrect
         self.autoCopyToClipboard = prefs.autoCopyToClipboard
+
+        // Load language prompts with migration from old initialPrompt
+        var loadedPrompts = prefs.languagePrompts
+        if loadedPrompts.isEmpty && !prefs.initialPrompt.isEmpty {
+            // Migrate old single initialPrompt to the current language
+            loadedPrompts[prefs.whisperLanguage == "auto" ? "en" : prefs.whisperLanguage] = prefs.initialPrompt
+        }
+        self.languagePrompts = loadedPrompts
+
+        // Set initial editing language to current selected (or "en" for auto)
+        self.editingPromptLanguage = prefs.whisperLanguage == "auto" ? "en" : prefs.whisperLanguage
 
         if let savedPath = prefs.selectedModelPath {
             self.selectedModelURL = URL(fileURLWithPath: savedPath)
@@ -213,11 +263,11 @@ struct Settings {
     var showTimestamps: Bool
     var temperature: Double
     var noSpeechThreshold: Double
-    var initialPrompt: String
+    var languagePrompts: [String: String]
     var useBeamSearch: Bool
     var beamSize: Int
     var useAsianAutocorrect: Bool
-    
+
     init() {
         let prefs = AppPreferences.shared
         self.selectedLanguage = prefs.whisperLanguage
@@ -226,10 +276,16 @@ struct Settings {
         self.showTimestamps = prefs.showTimestamps
         self.temperature = prefs.temperature
         self.noSpeechThreshold = prefs.noSpeechThreshold
-        self.initialPrompt = prefs.initialPrompt
+        self.languagePrompts = prefs.languagePrompts
         self.useBeamSearch = prefs.useBeamSearch
         self.beamSize = prefs.beamSize
         self.useAsianAutocorrect = prefs.useAsianAutocorrect
+    }
+
+    /// Get the effective prompt for a language (user-customized or default)
+    func getPrompt(for language: String) -> String? {
+        let prompt = LanguageUtil.getEffectivePrompt(for: language, userPrompts: languagePrompts)
+        return prompt.isEmpty ? nil : prompt
     }
 }
 
@@ -238,7 +294,7 @@ struct SettingsView: View {
     @ObservedObject private var modelManager = WhisperModelManager.shared
     @Environment(\.dismiss) var dismiss
     @State private var isRecordingNewShortcut = false
-    @State private var selectedTab: Int
+    @State private var selectedTab: Int = 0
     @State private var previousModelURL: URL?
     @State private var showDownloadError = false
     @State private var downloadErrorMessage = ""
@@ -248,47 +304,38 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-
-             // Shortcut Settings
-            shortcutSettings
-                .tabItem {
-                    Label("Shortcuts", systemImage: "command")
-                }
-                .tag(0)
-            // Model Settings
-            modelSettings
-                .tabItem {
-                    Label("Model", systemImage: "cpu")
-                }
-                .tag(1)
-            
-            // Transcription Settings
-            transcriptionSettings
-                .tabItem {
-                    Label("Transcription", systemImage: "text.bubble")
-                }
-                .tag(2)
-            
-            // Advanced Settings
-            advancedSettings
-                .tabItem {
-                    Label("Advanced", systemImage: "gear")
-                }
-                .tag(3)
-
-            // About
-            aboutSettings
-                .tabItem {
-                    Label("About", systemImage: "info.circle")
-                }
-                .tag(4)
+        VStack(spacing: 0) {
+            // Custom tab bar
+            HStack(spacing: 2) {
+                tabButton(title: "Shortcuts", icon: "command", tag: 0)
+                tabButton(title: "Model", icon: "cpu", tag: 1)
+                tabButton(title: "Transcription", icon: "text.bubble", tag: 2)
+                tabButton(title: "Advanced", icon: "gear", tag: 3)
+                tabButton(title: "About", icon: "info.circle", tag: 4)
             }
-        .padding()
-        .frame(width: 550)
-        .background(Color(.windowBackgroundColor))
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Divider()
+
+            // Tab content
+            Group {
+                switch selectedTab {
+                case 0: shortcutSettings
+                case 1: modelSettings
+                case 2: transcriptionSettings
+                case 3: advancedSettings
+                case 4: aboutSettings
+                default: shortcutSettings
+                }
+            }
+
+            Divider()
+
+            // Done button at bottom
+            HStack {
+                Spacer()
                 Button("Done") {
                     if viewModel.selectedModelURL != previousModelURL {
                         // Reload model if changed
@@ -300,16 +347,44 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
+                .keyboardShortcut(.defaultAction)
             }
+            .padding(12)
         }
+        .frame(width: 550)
+        .frame(minHeight: 500, maxHeight: 750)
+        .background(Color(.windowBackgroundColor))
         .onAppear {
             previousModelURL = viewModel.selectedModelURL
+            // Read from shared navigation if set (used when opening from Window scene)
+            if SettingsNavigation.shared.initialTab != 0 {
+                selectedTab = SettingsNavigation.shared.initialTab
+                SettingsNavigation.shared.initialTab = 0  // Reset after reading
+            }
         }
+    }
+
+    @ViewBuilder
+    private func tabButton(title: String, icon: String, tag: Int) -> some View {
+        Button(action: { selectedTab = tag }) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                Text(title)
+                    .font(.system(size: 12))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(selectedTab == tag ? Color.accentColor : Color.clear)
+            .foregroundColor(selectedTab == tag ? .white : .primary)
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
     }
     
     private var modelSettings: some View {
-        Form {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
                 // Unified Model List
                 VStack(spacing: 8) {
                     ForEach(availableModels) { model in
@@ -371,8 +446,8 @@ struct SettingsView: View {
                 .padding(.top, 12)
                 .padding(.horizontal, 4)
             }
+            .padding()
         }
-        .padding()
     }
 
     private func getCoreMLState(for model: DownloadableModel) -> CoreMLState {
@@ -411,37 +486,33 @@ struct SettingsView: View {
     }
     
     private var transcriptionSettings: some View {
-        Form {
-            VStack(spacing: 20) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
                 // Language Settings
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Language Settings")
                         .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Transcription Language")
-                            .font(Typography.settingsLabel)
-
-                        Picker("Language", selection: $viewModel.selectedLanguage) {
-                            ForEach(LanguageUtil.availableLanguages, id: \.self) { code in
-                                Text(LanguageUtil.languageNames[code] ?? code)
-                                    .tag(code)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Language:")
+                                .font(Typography.settingsLabel)
+                            Picker("", selection: $viewModel.selectedLanguage) {
+                                ForEach(LanguageUtil.availableLanguages, id: \.self) { code in
+                                    Text(LanguageUtil.languageNames[code] ?? code)
+                                        .tag(code)
+                                }
                             }
+                            .pickerStyle(.menu)
+                            Spacer()
                         }
-                        .pickerStyle(.menu)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(.controlBackgroundColor))
-                        .cornerRadius(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
                         Toggle(isOn: $viewModel.translateToEnglish) {
                             Text("Translate to English")
                                 .font(Typography.settingsBody)
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
-                        .padding(.top, 4)
 
                         if ["zh", "ja", "ko", "auto"].contains(viewModel.selectedLanguage) {
                             Toggle(isOn: $viewModel.useAsianAutocorrect) {
@@ -449,22 +520,21 @@ struct SettingsView: View {
                                     .font(Typography.settingsBody)
                             }
                             .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
-                            .padding(.top, 4)
                         }
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Output Options
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Output Options")
                         .font(Typography.settingsHeader)
                         .foregroundColor(.primary)
 
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Toggle(isOn: $viewModel.showTimestamps) {
                             Text("Show Timestamps")
                                 .font(Typography.settingsBody)
@@ -478,70 +548,114 @@ struct SettingsView: View {
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Initial Prompt
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Initial Prompt")
-                        .font(Typography.settingsHeader)
-                        .foregroundColor(.primary)
+                // Initial Prompt (Language-Specific)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Initial Prompt")
+                            .font(Typography.settingsHeader)
+                            .foregroundColor(.primary)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        TextEditor(text: $viewModel.initialPrompt)
-                            .font(Typography.settingsBody)
-                            .frame(height: 60)
-                            .padding(6)
-                            .background(Color(.textBackgroundColor))
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        // Language picker inline (auto-detect mode only)
+                        if viewModel.selectedLanguage == "auto" {
+                            Picker("", selection: $viewModel.editingPromptLanguage) {
+                                ForEach(LanguageUtil.availableLanguages.filter { $0 != "auto" }, id: \.self) { code in
+                                    HStack {
+                                        Text(LanguageUtil.languageNames[code] ?? code)
+                                        if LanguageUtil.isCustomPrompt(for: code, userPrompts: viewModel.languagePrompts) {
+                                            Text("*")
+                                        }
+                                    }
+                                    .tag(code)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 130)
+                        }
+
+                        Spacer()
+
+                        // Reset button (shown when prompt is customized)
+                        if viewModel.isCurrentPromptCustomized {
+                            Button(action: {
+                                let lang = viewModel.selectedLanguage == "auto"
+                                    ? viewModel.editingPromptLanguage
+                                    : viewModel.selectedLanguage
+                                viewModel.resetPromptToDefault(for: lang)
+                            }) {
+                                Text("Reset")
+                                    .font(Typography.settingsCaption)
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // Prompt editor
+                    TextEditor(text: Binding(
+                        get: { viewModel.currentEditingPrompt },
+                        set: { viewModel.currentEditingPrompt = $0 }
+                    ))
+                    .font(Typography.settingsBody)
+                    .frame(height: 56)
+                    .padding(6)
+                    .background(Color(.textBackgroundColor))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(
+                                viewModel.isCurrentPromptCustomized
+                                    ? Color.accentColor.opacity(0.5)
+                                    : Color.gray.opacity(0.3),
+                                lineWidth: 1
                             )
+                    )
 
-                        Text("Optional text to guide the model's transcription")
+                    // Concise helper text
+                    HStack(spacing: 4) {
+                        let langName = viewModel.selectedLanguage == "auto"
+                            ? (LanguageUtil.languageNames[viewModel.editingPromptLanguage] ?? viewModel.editingPromptLanguage)
+                            : (LanguageUtil.languageNames[viewModel.selectedLanguage] ?? viewModel.selectedLanguage)
+                        Text("Prompt used when \(langName) is detected.")
                             .font(Typography.settingsCaption)
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Transcriptions Directory
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Transcriptions Directory")
-                        .font(Typography.settingsHeader)
-                        .foregroundColor(.primary)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Directory:")
-                                .font(Typography.settingsLabel)
-                            Spacer()
-                            Button(action: {
-                                NSWorkspace.shared.open(Recording.recordingsDirectory)
-                            }) {
-                                Label("Open Folder", systemImage: "folder")
-                                    .font(Typography.settingsLabel)
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Open transcriptions directory")
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Transcriptions Directory")
+                            .font(Typography.settingsHeader)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Button(action: {
+                            NSWorkspace.shared.open(Recording.recordingsDirectory)
+                        }) {
+                            Label("Open", systemImage: "folder")
+                                .font(Typography.settingsCaption)
                         }
-
-                        Text(Recording.recordingsDirectory.path)
-                            .font(Typography.settingsMono)
-                            .foregroundColor(.secondary)
-                            .textSelection(.enabled)
-                            .padding(8)
-                            .background(Color(.textBackgroundColor).opacity(0.5))
-                            .cornerRadius(6)
+                        .buttonStyle(.borderless)
+                        .help("Open transcriptions directory")
                     }
+
+                    Text(Recording.recordingsDirectory.path)
+                        .font(Typography.settingsMono)
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                        .padding(6)
+                        .background(Color(.textBackgroundColor).opacity(0.5))
+                        .cornerRadius(6)
                 }
-                .padding()
+                .padding(12)
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -551,8 +665,8 @@ struct SettingsView: View {
     }
     
     private var advancedSettings: some View {
-        Form {
-            VStack(spacing: 20) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 // Decoding Strategy
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Decoding Strategy")
@@ -649,8 +763,8 @@ struct SettingsView: View {
     }
     
     private var shortcutSettings: some View {
-        Form {
-            VStack(spacing: 20) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 // Recording Shortcut
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Recording Shortcut")
@@ -794,7 +908,7 @@ struct SettingsView: View {
     }
 
     private var aboutSettings: some View {
-        Form {
+        ScrollView {
             VStack(spacing: 20) {
                 // App Info
                 VStack(spacing: 12) {

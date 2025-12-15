@@ -166,8 +166,7 @@ class ContentViewModel: ObservableObject {
 struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
     @StateObject private var permissionsManager = PermissionsManager()
-    @State private var isSettingsPresented = false
-    @State private var settingsInitialTab = 0
+    @Environment(\.openWindow) var openWindow
     @State private var searchText = ""
     @State private var showDeleteConfirmation = false
 
@@ -409,7 +408,7 @@ struct ContentView: View {
                                     }
 
                                     Button(action: {
-                                        isSettingsPresented.toggle()
+                                        openWindow(id: "settings")
                                     }) {
                                         Image(systemName: "gear")
                                             .font(.system(size: 14))
@@ -451,23 +450,14 @@ struct ContentView: View {
             }
         }
         .fileDropHandler()
-        .sheet(isPresented: $isSettingsPresented) {
-            SettingsView(initialTab: settingsInitialTab)
-        }
         .alert("Model Not Available", isPresented: $viewModel.showModelError) {
             Button("Open Settings") {
-                settingsInitialTab = 1  // Model tab
-                isSettingsPresented = true
+                SettingsNavigation.shared.initialTab = 1  // Model tab
+                openWindow(id: "settings")
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("\(viewModel.modelErrorMessage)\n\nPlease download a model in Settings to use transcription.")
-        }
-        .onChange(of: isSettingsPresented) { _, isPresented in
-            // Reset to default tab when settings is closed
-            if !isPresented {
-                settingsInitialTab = 0
-            }
         }
         .onAppear {
             // Check if model is missing at launch and show alert

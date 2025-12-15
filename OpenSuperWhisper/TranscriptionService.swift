@@ -232,18 +232,42 @@ class TranscriptionService: ObservableObject {
             try Task.checkCancellation()
             
             var params = WhisperFullParams()
-            
+
             params.strategy = settings.useBeamSearch ? .beamSearch : .greedy
             params.nThreads = Int32(nThreads)
             params.noTimestamps = !settings.showTimestamps
             params.suppressBlank = settings.suppressBlankAudio
             params.translate = settings.translateToEnglish
-            params.language = settings.selectedLanguage != "auto" ? settings.selectedLanguage : nil
-            params.detectLanguage = false // should be false, whisper handles language detection by language property.
-            
+
+            // Determine effective language and prompt
+            // For auto-detect mode, detect language first to get the appropriate prompt
+            let effectiveLanguageForPrompt: String
+            if settings.selectedLanguage == "auto" {
+                // Detect language first using the already-encoded audio
+                var langProbs = [Float](repeating: 0, count: MyWhisperContext.langMaxId() + 1)
+                let detectedLangId = context.langAutoDetect(offsetMs: 0, nThreads: nThreads, langProbs: &langProbs)
+                if detectedLangId >= 0, let langStr = MyWhisperContext.langStr(id: detectedLangId) {
+                    effectiveLanguageForPrompt = langStr
+                    print("TranscriptionService: Pre-detected language for prompt: \(langStr)")
+                } else {
+                    effectiveLanguageForPrompt = "en"  // Fallback to English
+                }
+                params.language = nil  // Let whisper confirm via full transcription
+            } else {
+                effectiveLanguageForPrompt = settings.selectedLanguage
+                params.language = settings.selectedLanguage
+            }
+            params.detectLanguage = false
+
             params.temperature = Float(settings.temperature)
             params.noSpeechThold = Float(settings.noSpeechThreshold)
-            params.initialPrompt = settings.initialPrompt.isEmpty ? nil : settings.initialPrompt
+
+            // Use language-specific initial prompt
+            let effectivePrompt = settings.getPrompt(for: effectiveLanguageForPrompt)
+            params.initialPrompt = effectivePrompt
+            if let prompt = effectivePrompt {
+                print("TranscriptionService: Using prompt for \(effectiveLanguageForPrompt): \(prompt)")
+            }
             
             // Set up the abort callback
             typealias GGMLAbortCallback = @convention(c) (UnsafeMutableRawPointer?) -> Bool
