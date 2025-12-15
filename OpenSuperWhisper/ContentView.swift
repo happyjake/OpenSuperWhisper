@@ -286,10 +286,11 @@ struct ContentView: View {
                                 switch viewModel.state {
                                 case .decoding:
                                     ProgressView()
-                                        .scaleEffect(1.0)
-                                        .frame(width: 64, height: 64)
+                                        .controlSize(.large)
+                                        .frame(width: 120, height: 120)
                                 case .copied:
                                     CopiedButton()
+                                        .frame(width: 120, height: 120)
                                 default:
                                     AmplitudeRingRecordButton(state: viewModel.state)
                                 }
@@ -323,7 +324,7 @@ struct ContentView: View {
                                 }
                                 .shadow(color: .black.opacity(0.12), radius: 20, y: 10)
                             }
-                            .padding(.bottom, 20)
+                            .padding(.bottom, 8)
                             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isRecording)
                             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.state)
 
@@ -345,7 +346,7 @@ struct ContentView: View {
 
                                 // Right: controls
                                 HStack(spacing: 8) {
-                                    MicrophonePickerIconView(microphoneService: viewModel.microphoneService, permissionsManager: viewModel.permissionsManager)
+                                    MicrophonePickerIconView(microphoneService: viewModel.microphoneService, permissionsManager: viewModel.permissionsManager, isRecording: viewModel.isRecording)
 
                                     if !viewModel.recordingStore.recordings.isEmpty {
                                         Button(action: {
@@ -831,7 +832,13 @@ struct TranscriptionDetailView: View {
 struct MicrophonePickerIconView: View {
     @ObservedObject var microphoneService: MicrophoneService
     @ObservedObject var permissionsManager: PermissionsManager
+    @StateObject private var meterService = AudioMeterService.shared
     @State private var showMenu = false
+    let isRecording: Bool
+
+    private var hasSignal: Bool {
+        isRecording && meterService.normalizedAmplitude > 0.05
+    }
 
     private var systemAudioDevices: [MicrophoneService.AudioDevice] {
         microphoneService.availableMicrophones.filter { $0.isSystemAudio }
@@ -861,26 +868,55 @@ struct MicrophonePickerIconView: View {
         !permissionsManager.isSystemAudioPermissionGranted
     }
 
+    private var deviceDisplayName: String {
+        guard let device = microphoneService.currentMicrophone else {
+            return "No device"
+        }
+        // Shorten common names for display
+        if device.isSystemAudio {
+            return "System Audio"
+        }
+        return device.name
+    }
+
     var body: some View {
         Button(action: {
             showMenu.toggle()
         }) {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: iconName)
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(8)
+            HStack(spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: iconName)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
 
-                // Warning badge when permission is missing
-                if showPermissionWarning {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.orange)
-                        .offset(x: 4, y: -4)
+                    // Warning badge when permission is missing
+                    if showPermissionWarning {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(.orange)
+                            .offset(x: 4, y: -4)
+                    }
+                }
+
+                Text(deviceDisplayName)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                // Signal indicator (only during recording)
+                if isRecording {
+                    Circle()
+                        .fill(hasSignal ? Color.green : Color.gray.opacity(0.5))
+                        .frame(width: 6, height: 6)
+                        .animation(.easeInOut(duration: 0.15), value: hasSignal)
                 }
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(6)
+            .frame(maxWidth: 150)
         }
         .buttonStyle(.plain)
         .help(showPermissionWarning

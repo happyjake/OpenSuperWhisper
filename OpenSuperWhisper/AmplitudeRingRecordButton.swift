@@ -18,6 +18,7 @@ struct AmplitudeRingConfig {
     static let maxExpandPx: CGFloat = 14
     static let baseThickness: CGFloat = 2.5
     static let maxThickness: CGFloat = 6.0
+    static let thicknessCurve: CGFloat = 0.6  // ease-out exponent for non-linear thickness
 
     // Colors
     static let idleColor = Color.red.opacity(0.3)
@@ -26,15 +27,27 @@ struct AmplitudeRingConfig {
     static let clippingColor = Color.orange
     static let glowColor = Color.red
 
-    // Animation
-    static let smoothingAlphaAttack: CGFloat = 0.25
-    static let smoothingAlphaRelease: CGFloat = 0.08
-    static let clippingFlashDuration: TimeInterval = 0.2
+    // Animation - asymmetric smoothing for natural feel
+    static let smoothingAlphaAttack: CGFloat = 0.6   // very fast rise
+    static let smoothingAlphaRelease: CGFloat = 0.12 // slow calm decay
+    static let clippingFlashDuration: TimeInterval = 0.15
     static let armedPulseDuration: TimeInterval = 0.8
 
-    // Glow
+    // Outer halo (constant slow pulse when recording)
+    static let haloOpacity: CGFloat = 0.3
+    static let haloPulseDuration: TimeInterval = 2.5
+    static let haloOffset: CGFloat = 8
+
+    // Opacity mapping (brightness = volume)
+    static let minRingOpacity: CGFloat = 0.5
+    static let maxRingOpacity: CGFloat = 1.0
+
+    // Inner glow (amplitude-based)
     static let glowRadius: CGFloat = 6
-    static let maxGlowOpacity: CGFloat = 0.3
+    static let maxGlowOpacity: CGFloat = 0.25
+
+    // Too quiet breathing pulse
+    static let quietPulseDuration: TimeInterval = 1.5
 }
 
 // MARK: - AmplitudeRingRecordButton
@@ -67,6 +80,7 @@ struct AmplitudeRingRecordButton: View {
                 AmplitudeRingCanvas(
                     amplitude: meterService.normalizedAmplitude,
                     isClipping: meterService.isClipping,
+                    isTooQuiet: meterService.isTooQuiet,
                     isArmed: isArmed,
                     isRecording: state == .recording,
                     isProcessing: state == .decoding
@@ -121,9 +135,15 @@ struct AmplitudeRingRecordButton: View {
 // MARK: - AmplitudeRingCanvas
 
 /// Canvas-based amplitude ring visualization for smooth 60fps rendering.
+/// Features:
+/// - Inner ring: amplitude-reactive (answers "is it hearing me?")
+/// - Outer halo: constant slow pulse (answers "is it recording?")
+/// - Non-linear thickness mapping
+/// - Brightness = volume (opacity varies with amplitude)
 struct AmplitudeRingCanvas: View {
     let amplitude: Float
     let isClipping: Bool
+    let isTooQuiet: Bool
     let isArmed: Bool
     let isRecording: Bool
     let isProcessing: Bool
@@ -132,16 +152,27 @@ struct AmplitudeRingCanvas: View {
     @State private var frozenAmplitude: CGFloat = 0
     @State private var showClippingFlash = false
     @State private var armedPulse: CGFloat = 0
+    @State private var haloPulse: CGFloat = 0
+    @State private var quietPulse: CGFloat = 0
 
     private let config = AmplitudeRingConfig.self
 
-    // Frame needs to be large enough for ring + expansion + glow
+    // Frame needs to be large enough for ring + expansion + halo
     private let frameSize: CGFloat = 120
 
     var body: some View {
         ZStack {
-            // Glow layer (using SwiftUI shadow for smooth circular glow)
-            if isArmed || (isRecording && !isProcessing) {
+            // Layer 1: Outer halo (constant slow pulse - "is it recording?")
+            if isRecording && !isProcessing {
+                Circle()
+                    .stroke(config.recordingColor, lineWidth: 4)
+                    .frame(width: haloDiameter, height: haloDiameter)
+                    .blur(radius: 8)
+                    .opacity(config.haloOpacity * (0.5 + 0.5 * haloPulse))
+            }
+
+            // Layer 2: Inner glow (amplitude-based)
+            if isArmed || (isRecording && !isProcessing && !isTooQuiet) {
                 Circle()
                     .stroke(config.glowColor, lineWidth: currentThickness)
                     .frame(width: currentDiameter, height: currentDiameter)
@@ -149,14 +180,14 @@ struct AmplitudeRingCanvas: View {
                     .opacity(glowOpacity)
             }
 
-            // Ring layer (using Canvas for precise control)
+            // Layer 3: Main ring (amplitude-reactive - "is it hearing me?")
             Canvas { context, size in
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let displayAmp = isProcessing ? frozenAmplitude : smoothedAmplitude
 
-                // Calculate ring geometry
+                // Calculate ring geometry with non-linear thickness
                 let radius = config.buttonRadius + config.baselineOffset + (displayAmp * config.maxExpandPx)
-                let thickness = config.baseThickness + (displayAmp * (config.maxThickness - config.baseThickness))
+                let thickness = calculateThickness(displayAmp)
 
                 // Draw ring
                 let ringRect = CGRect(
@@ -191,14 +222,31 @@ struct AmplitudeRingCanvas: View {
         .onChange(of: isArmed) { _, armed in
             updateArmedPulse(armed)
         }
+        .onChange(of: isRecording) { _, recording in
+            if recording {
+                startHaloPulse()
+            } else {
+                stopHaloPulse()
+            }
+        }
+        .onChange(of: isTooQuiet) { _, quiet in
+            if quiet {
+                startQuietPulse()
+            } else {
+                stopQuietPulse()
+            }
+        }
         .onAppear {
             if isArmed {
                 updateArmedPulse(true)
             }
+            if isRecording {
+                startHaloPulse()
+            }
         }
     }
 
-    // MARK: - Computed Properties for Glow
+    // MARK: - Computed Properties
 
     private var displayAmplitude: CGFloat {
         isProcessing ? frozenAmplitude : smoothedAmplitude
@@ -208,26 +256,38 @@ struct AmplitudeRingCanvas: View {
         (config.buttonRadius + config.baselineOffset + (displayAmplitude * config.maxExpandPx)) * 2
     }
 
+    private var haloDiameter: CGFloat {
+        (config.buttonRadius + config.baselineOffset + config.maxExpandPx + config.haloOffset) * 2
+    }
+
+    /// Non-linear thickness mapping (ease-out curve)
+    /// Emphasizes mid-range speech, caps at maxThickness
+    private func calculateThickness(_ amp: CGFloat) -> CGFloat {
+        // Apply ease-out curve: thickness grows faster at lower amplitudes
+        let curved = pow(amp, config.thicknessCurve)
+        return config.baseThickness + (curved * (config.maxThickness - config.baseThickness))
+    }
+
     private var currentThickness: CGFloat {
-        config.baseThickness + (displayAmplitude * (config.maxThickness - config.baseThickness))
+        calculateThickness(displayAmplitude)
     }
 
     private var glowOpacity: Double {
         if isArmed {
-            return 0.2 + 0.15 * armedPulse
+            return 0.15 + 0.1 * armedPulse
         } else if isRecording && !isProcessing {
             return Double(config.maxGlowOpacity * displayAmplitude)
         }
         return 0
     }
 
-    // MARK: - Drawing
+    // MARK: - Ring Color & Opacity
 
     private var ringColor: Color {
         if showClippingFlash {
             return config.clippingColor
         } else if isArmed {
-            return config.armedColor
+            return config.recordingColor
         } else if isRecording || isProcessing {
             return config.recordingColor
         } else {
@@ -235,13 +295,19 @@ struct AmplitudeRingCanvas: View {
         }
     }
 
+    /// Opacity maps to volume (brightness = volume)
     private var ringOpacity: Double {
         if showClippingFlash {
             return 1.0
         } else if isArmed {
             return 0.5 + 0.2 * armedPulse
+        } else if isTooQuiet && isRecording {
+            // Breathing pulse when too quiet
+            return config.minRingOpacity + 0.15 * quietPulse
         } else if isRecording {
-            return 0.7 + 0.3 * Double(smoothedAmplitude)
+            // Brightness = volume
+            let volumeOpacity = config.minRingOpacity + (config.maxRingOpacity - config.minRingOpacity) * Double(smoothedAmplitude)
+            return volumeOpacity
         } else if isProcessing {
             return 0.6
         } else {
@@ -254,10 +320,10 @@ struct AmplitudeRingCanvas: View {
     private func updateSmoothedAmplitude(_ newValue: Float) {
         let alpha: CGFloat
         if CGFloat(newValue) > smoothedAmplitude {
-            // Attack - fast rise
+            // Attack - very fast rise
             alpha = config.smoothingAlphaAttack
         } else {
-            // Release - slow decay
+            // Release - slow calm decay
             alpha = config.smoothingAlphaRelease
         }
         smoothedAmplitude = alpha * CGFloat(newValue) + (1 - alpha) * smoothedAmplitude
@@ -285,6 +351,30 @@ struct AmplitudeRingCanvas: View {
             withAnimation(.easeOut(duration: 0.2)) {
                 armedPulse = 0
             }
+        }
+    }
+
+    private func startHaloPulse() {
+        withAnimation(.easeInOut(duration: config.haloPulseDuration).repeatForever(autoreverses: true)) {
+            haloPulse = 1.0
+        }
+    }
+
+    private func stopHaloPulse() {
+        withAnimation(.easeOut(duration: 0.3)) {
+            haloPulse = 0
+        }
+    }
+
+    private func startQuietPulse() {
+        withAnimation(.easeInOut(duration: config.quietPulseDuration).repeatForever(autoreverses: true)) {
+            quietPulse = 1.0
+        }
+    }
+
+    private func stopQuietPulse() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            quietPulse = 0
         }
     }
 }

@@ -48,14 +48,27 @@ final class AudioMeterService: ObservableObject {
     /// Number of consecutive clipping frames before triggering
     private let clippingFrameCount: Int = 2
 
-    /// EMA coefficient for attack (fast rise)
-    private let attackCoefficient: Float = 0.2
+    /// EMA coefficient for attack (very fast rise - instant response to speech)
+    private let attackCoefficient: Float = 0.55
 
-    /// EMA coefficient for release (slow decay)
-    private let releaseCoefficient: Float = 0.05
+    /// EMA coefficient for release (slow decay - calm falloff, not twitchy)
+    private let releaseCoefficient: Float = 0.10
 
     /// Timer update frequency in Hz
-    private let meterUpdateHz: Double = 30.0
+    private let meterUpdateHz: Double = 60.0
+
+    // MARK: - Too Quiet Detection
+
+    /// Threshold below which audio is considered "too quiet"
+    private let quietThreshold: Float = 0.05
+
+    /// Duration of quiet before triggering isTooQuiet
+    private let quietDuration: TimeInterval = 1.5
+
+    /// Published state for too quiet hint
+    @Published private(set) var isTooQuiet: Bool = false
+
+    private var quietStartTime: Date?
 
     // MARK: - Internal State
 
@@ -179,6 +192,30 @@ final class AudioMeterService: ObservableObject {
         if clippingCounter >= clippingFrameCount && !isClipping {
             triggerClipping()
         }
+
+        // 6. Too quiet detection
+        checkTooQuiet(rawNormalized)
+    }
+
+    private func checkTooQuiet(_ amplitude: Float) {
+        if amplitude < quietThreshold {
+            // Audio is quiet
+            if quietStartTime == nil {
+                quietStartTime = Date()
+            } else if let startTime = quietStartTime,
+                      Date().timeIntervalSince(startTime) >= quietDuration {
+                // Been quiet long enough
+                if !isTooQuiet {
+                    isTooQuiet = true
+                }
+            }
+        } else {
+            // Audio is loud enough - reset
+            quietStartTime = nil
+            if isTooQuiet {
+                isTooQuiet = false
+            }
+        }
     }
 
     private func triggerClipping() {
@@ -233,6 +270,8 @@ final class AudioMeterService: ObservableObject {
         peakAmplitude = 0
         isClipping = false
         clippingCounter = 0
+        isTooQuiet = false
+        quietStartTime = nil
     }
 
     /// Reset all state immediately without animation
@@ -248,6 +287,8 @@ final class AudioMeterService: ObservableObject {
         peakAmplitude = 0
         isClipping = false
         clippingCounter = 0
+        isTooQuiet = false
+        quietStartTime = nil
     }
 }
 
