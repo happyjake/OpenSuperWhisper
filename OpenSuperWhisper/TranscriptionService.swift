@@ -10,7 +10,8 @@ class TranscriptionService: ObservableObject {
     @Published private(set) var currentSegment = ""
     @Published private(set) var isLoading = false
     @Published private(set) var progress: Float = 0.0
-    
+    @Published private(set) var modelLoadError: String? = nil
+
     private var context: MyWhisperContext?
     private var totalDuration: Float = 0.0
     private var transcriptionTask: Task<String, Error>? = nil
@@ -47,17 +48,17 @@ class TranscriptionService: ObservableObject {
         abortFlag?.deallocate()
     }
 
-    /// Wait for model to be loaded. Returns immediately if already loaded.
+    /// Wait for model to be loaded. Returns immediately if already loaded or if loading failed.
     func waitForModelReady() async {
-        // If model is already loaded, return immediately
-        if context != nil && !isLoading {
+        // If not currently loading, return immediately (either loaded successfully or failed)
+        if !isLoading {
             return
         }
 
         // Wait for model to finish loading
         await withCheckedContinuation { continuation in
-            // Double-check in case model loaded while we were setting up
-            if context != nil && !isLoading {
+            // Double-check in case model finished loading while we were setting up
+            if !isLoading {
                 continuation.resume()
             } else {
                 modelLoadedWaiters.append(continuation)
@@ -74,29 +75,59 @@ class TranscriptionService: ObservableObject {
 
     private func loadModel() {
         print("Loading model")
-        if let modelPath = AppPreferences.shared.selectedModelPath {
-            isLoading = true
+        modelLoadError = nil
 
-            Task.detached(priority: .userInitiated) { [weak self] in
-                let params = WhisperContextParams()
-                let newContext = MyWhisperContext.initFromFile(path: modelPath, params: params)
-
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.context = newContext
-                    self.isLoading = false
-                    self.resumeModelWaiters()
-                    print("Model loaded")
-                }
-            }
-        } else {
-            // No model path - resume waiters anyway so they don't hang forever
+        guard let modelPath = AppPreferences.shared.selectedModelPath else {
+            modelLoadError = "No model selected"
+            print("Model loading failed: No model path configured")
             resumeModelWaiters()
+            return
+        }
+
+        // Check if model file exists
+        guard FileManager.default.fileExists(atPath: modelPath) else {
+            modelLoadError = "Model file not found: \(URL(fileURLWithPath: modelPath).lastPathComponent)"
+            print("Model loading failed: File does not exist at \(modelPath)")
+            resumeModelWaiters()
+            return
+        }
+
+        isLoading = true
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let params = WhisperContextParams()
+            let newContext = MyWhisperContext.initFromFile(path: modelPath, params: params)
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.context = newContext
+                self.isLoading = false
+
+                if newContext != nil {
+                    self.modelLoadError = nil
+                    print("Model loaded successfully")
+                } else {
+                    self.modelLoadError = "Failed to initialize model"
+                    print("Model loading failed: Could not initialize context")
+                }
+
+                self.resumeModelWaiters()
+            }
         }
     }
     
     func reloadModel(with path: String) {
         print("Reloading model")
+        modelLoadError = nil
+
+        // Check if model file exists
+        guard FileManager.default.fileExists(atPath: path) else {
+            modelLoadError = "Model file not found: \(URL(fileURLWithPath: path).lastPathComponent)"
+            print("Model reload failed: File does not exist at \(path)")
+            resumeModelWaiters()
+            return
+        }
+
         isLoading = true
 
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -107,8 +138,16 @@ class TranscriptionService: ObservableObject {
                 guard let self else { return }
                 self.context = newContext
                 self.isLoading = false
+
+                if newContext != nil {
+                    self.modelLoadError = nil
+                    print("Model reloaded successfully")
+                } else {
+                    self.modelLoadError = "Failed to initialize model"
+                    print("Model reload failed: Could not initialize context")
+                }
+
                 self.resumeModelWaiters()
-                print("Model reloaded")
             }
         }
     }
@@ -116,6 +155,11 @@ class TranscriptionService: ObservableObject {
     func transcribeAudio(url: URL, settings: Settings) async throws -> String {
         // Wait for model to be ready before starting transcription
         await waitForModelReady()
+
+        // Check if model failed to load
+        if let error = modelLoadError {
+            throw TranscriptionError.modelLoadFailed(error)
+        }
 
         await MainActor.run {
             self.progress = 0.0
@@ -425,8 +469,22 @@ class TranscriptionService: ObservableObject {
     }
 }
 
-enum TranscriptionError: Error {
+enum TranscriptionError: LocalizedError {
+    case modelLoadFailed(String)
     case contextInitializationFailed
     case audioConversionFailed
     case processingFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .modelLoadFailed(let reason):
+            return "Model load failed: \(reason)"
+        case .contextInitializationFailed:
+            return "Failed to initialize transcription context"
+        case .audioConversionFailed:
+            return "Failed to convert audio"
+        case .processingFailed:
+            return "Transcription processing failed"
+        }
+    }
 }

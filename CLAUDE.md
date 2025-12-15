@@ -82,3 +82,4 @@ The underlying C library lives in `libwhisper/whisper.cpp` (git submodule).
 - Model path, language, temperature, beam search settings
 - Microphone selection (serialized as Data)
 - UI state (onboarding completed, sound on record)
+- ALWAYS use run.sh to build the App

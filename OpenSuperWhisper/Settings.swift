@@ -98,9 +98,9 @@ class SettingsViewModel: ObservableObject {
     private var accessibilityCheckTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
-    // CoreML state (observed from WhisperModelManager)
-    @Published var coreMLDownloadProgress: Double = 0
-    @Published var isCoreMLDownloading: Bool = false
+    // Model download error handling
+    @Published var showDownloadError = false
+    @Published var downloadErrorMessage = ""
 
     init() {
         let prefs = AppPreferences.shared
@@ -124,24 +124,6 @@ class SettingsViewModel: ObservableObject {
         loadAvailableModels()
         checkAccessibilityPermission()
         startAccessibilityChecking()
-        observeCoreMLState()
-    }
-
-    private func observeCoreMLState() {
-        let manager = WhisperModelManager.shared
-        manager.$coreMLDownloadProgress
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] progress in
-                self?.coreMLDownloadProgress = progress
-            }
-            .store(in: &cancellables)
-
-        manager.$isCoreMLDownloading
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] downloading in
-                self?.isCoreMLDownloading = downloading
-            }
-            .store(in: &cancellables)
     }
 
     func hasCoreMLModel() -> Bool {
@@ -174,13 +156,23 @@ class SettingsViewModel: ObservableObject {
         WhisperModelManager.shared.downloadCoreMLInBackground(from: coreMLURL, for: modelName)
     }
 
-    func cancelCoreMLDownload() {
-        WhisperModelManager.shared.cancelCoreMLDownload()
+    func cancelCoreMLDownload(deleteResumeData: Bool = false) {
+        WhisperModelManager.shared.cancelCoreMLDownload(deleteResumeData: deleteResumeData)
     }
 
     func deleteCoreML() {
         guard let modelName = selectedModelURL?.lastPathComponent else { return }
         try? WhisperModelManager.shared.deleteCoreMLModel(for: modelName)
+    }
+
+    func hasCoreMLResumableDownload() -> Bool {
+        guard let modelName = selectedModelURL?.lastPathComponent else { return false }
+        return WhisperModelManager.shared.hasCoreMLResumableDownload(for: modelName)
+    }
+
+    func getCoreMLResumableProgress() -> Double {
+        guard let modelName = selectedModelURL?.lastPathComponent else { return 0 }
+        return WhisperModelManager.shared.getCoreMLResumableDownload(for: modelName)?.progress ?? 0
     }
 
     deinit {
@@ -243,11 +235,18 @@ struct Settings {
 
 struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
+    @ObservedObject private var modelManager = WhisperModelManager.shared
     @Environment(\.dismiss) var dismiss
     @State private var isRecordingNewShortcut = false
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int
     @State private var previousModelURL: URL?
-    
+    @State private var showDownloadError = false
+    @State private var downloadErrorMessage = ""
+
+    init(initialTab: Int = 0) {
+        _selectedTab = State(initialValue: initialTab)
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
 
@@ -353,21 +352,42 @@ struct SettingsView: View {
                     }
                     .padding(.top, 8)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("To display other models in the list, you need to download a ggml bin file and place it in the models folder. Then restart the application.")
-                            .font(Typography.settingsCaption)
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Link("Download models here", destination: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/tree/main")!)
-                            .font(Typography.settingsCaption)
-                    }
-                    .padding(.top, 8)
                 }
                 .padding()
                 .background(Color(.controlBackgroundColor).opacity(0.3))
                 .cornerRadius(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Download Models Section
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Download Models")
+                        .font(Typography.settingsHeader)
+                        .foregroundColor(.primary)
+
+                    VStack(spacing: 8) {
+                        ForEach(availableModels) { model in
+                            ModelRowView(
+                                model: model,
+                                modelManager: modelManager,
+                                onDownload: {
+                                    downloadModel(model)
+                                },
+                                onCancel: {
+                                    modelManager.cancelDownload(for: model.filename)
+                                }
+                            )
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .alert("Download Error", isPresented: $showDownloadError) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text(downloadErrorMessage)
+                }
 
                 // CoreML Acceleration Section
                 VStack(alignment: .leading, spacing: 16) {
@@ -376,18 +396,18 @@ struct SettingsView: View {
                         .foregroundColor(.primary)
 
                     VStack(alignment: .leading, spacing: 12) {
-                        if viewModel.isCoreMLDownloading {
+                        if modelManager.isCoreMLDownloading {
                             // Downloading state
                             HStack(spacing: 12) {
-                                ProgressView(value: viewModel.coreMLDownloadProgress)
+                                ProgressView(value: modelManager.coreMLDownloadProgress)
                                     .frame(width: 120)
-                                Text("\(Int(viewModel.coreMLDownloadProgress * 100))%")
+                                Text("\(Int(modelManager.coreMLDownloadProgress * 100))%")
                                     .font(Typography.settingsBody)
                                     .foregroundColor(.secondary)
                                     .frame(width: 40)
                                 Spacer()
                                 Button("Cancel") {
-                                    viewModel.cancelCoreMLDownload()
+                                    viewModel.cancelCoreMLDownload(deleteResumeData: false)
                                 }
                                 .buttonStyle(.bordered)
                             }
@@ -409,6 +429,31 @@ struct SettingsView: View {
                                 .foregroundColor(.red)
                             }
                             Text("Transcription uses Apple Neural Engine for faster processing")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                        } else if viewModel.hasCoreMLResumableDownload() {
+                            // Paused/resumable download state
+                            HStack(spacing: 12) {
+                                Image(systemName: "arrow.clockwise.circle")
+                                    .foregroundColor(.blue)
+                                Text("Download Paused (\(Int(viewModel.getCoreMLResumableProgress() * 100))%)")
+                                    .font(Typography.settingsBody)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Button("Resume") {
+                                    viewModel.downloadCoreML()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                Button {
+                                    viewModel.cancelCoreMLDownload(deleteResumeData: true)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.red.opacity(0.8))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Cancel and restart from beginning")
+                            }
+                            Text("Tap Resume to continue downloading CoreML encoder")
                                 .font(Typography.settingsCaption)
                                 .foregroundColor(.secondary)
                         } else if viewModel.isCoreMLAvailable() {
@@ -1016,6 +1061,45 @@ struct SettingsView: View {
             .padding()
         }
     }
+
+    // MARK: - Helper Methods
+
+    private func downloadModel(_ model: DownloadableModel) {
+        Task {
+            do {
+                let filename = model.filename
+                try await WhisperModelManager.shared.downloadModel(url: model.url, name: filename) { progress in
+                    // Progress is tracked via WhisperModelManager.currentDownload
+                }
+                // Refresh the model picker after download completes
+                await MainActor.run {
+                    viewModel.loadAvailableModels()
+                    // Select the newly downloaded model
+                    if let newModel = viewModel.availableModels.first(where: { $0.lastPathComponent == filename }) {
+                        viewModel.selectedModelURL = newModel
+                    }
+                }
+
+                // Auto-select and reload if there's no working model
+                if TranscriptionService.shared.modelLoadError != nil {
+                    let modelPath = WhisperModelManager.shared.modelsDirectory.appendingPathComponent(filename).path
+                    AppPreferences.shared.selectedModelPath = modelPath
+                    TranscriptionService.shared.reloadModel(with: modelPath)
+                }
+
+                // Trigger CoreML download in background if available
+                if let coreMLURL = model.url.coreMLEncoderURL {
+                    print("Starting CoreML encoder download in background...")
+                    WhisperModelManager.shared.downloadCoreMLInBackground(from: coreMLURL, for: filename)
+                }
+            } catch {
+                await MainActor.run {
+                    downloadErrorMessage = error.localizedDescription
+                    showDownloadError = true
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Helper Views
@@ -1043,3 +1127,4 @@ struct DependencyRow: View {
         }
     }
 }
+

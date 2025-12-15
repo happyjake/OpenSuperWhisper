@@ -108,10 +108,20 @@ class FileDropHandler: ObservableObject {
                         duration: self.fileDuration
                     ))
                 
+            } catch let error as TranscriptionError {
+                print("Error processing dropped audio file: \(error)")
+                // Post notification for model errors
+                if case .modelLoadFailed(let reason) = error {
+                    NotificationCenter.default.post(
+                        name: .modelLoadErrorOccurred,
+                        object: nil,
+                        userInfo: ["message": reason]
+                    )
+                }
             } catch {
                 print("Error processing dropped audio file: \(error)")
             }
-            
+
             self.isTranscribing = false
             self.fileDuration = 0
         }

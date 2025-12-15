@@ -108,6 +108,21 @@ class IndicatorViewModel: ObservableObject {
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 }
 
+            } catch let error as TranscriptionError {
+                print("Error transcribing audio: \(error)")
+                try? FileManager.default.removeItem(at: tempURL)
+                await MainActor.run {
+                    self.stateManager.reset()
+
+                    // Post notification for model errors so main window can show alert
+                    if case .modelLoadFailed(let reason) = error {
+                        NotificationCenter.default.post(
+                            name: .modelLoadErrorOccurred,
+                            object: nil,
+                            userInfo: ["message": reason]
+                        )
+                    }
+                }
             } catch {
                 print("Error transcribing audio: \(error)")
                 try? FileManager.default.removeItem(at: tempURL)

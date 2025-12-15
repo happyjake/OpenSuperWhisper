@@ -11,6 +11,10 @@ import KeyboardShortcuts
 import SwiftUI
 import UniformTypeIdentifiers
 
+extension Notification.Name {
+    static let modelLoadErrorOccurred = Notification.Name("modelLoadErrorOccurred")
+}
+
 @MainActor
 class ContentViewModel: ObservableObject {
     private let stateManager = RecordingStateManager.shared
@@ -19,6 +23,10 @@ class ContentViewModel: ObservableObject {
     @Published var recordingStore = RecordingStore.shared
     @Published var microphoneService = MicrophoneService.shared
     @Published var permissionsManager = PermissionsManager()
+
+    // Model error handling
+    @Published var showModelError = false
+    @Published var modelErrorMessage = ""
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -42,6 +50,17 @@ class ContentViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        // Observe model load errors from any source (e.g., floating indicator)
+        NotificationCenter.default.publisher(for: .modelLoadErrorOccurred)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                if let message = notification.userInfo?["message"] as? String {
+                    self?.modelErrorMessage = message
+                    self?.showModelError = true
+                }
             }
             .store(in: &cancellables)
     }
@@ -116,6 +135,18 @@ class ContentViewModel: ObservableObject {
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 }
 
+            } catch let error as TranscriptionError {
+                print("Error transcribing audio: \(error)")
+                try? FileManager.default.removeItem(at: tempURL)
+                await MainActor.run {
+                    self.stateManager.reset()
+
+                    // Show user-friendly error for model issues
+                    if case .modelLoadFailed(let reason) = error {
+                        self.modelErrorMessage = reason
+                        self.showModelError = true
+                    }
+                }
             } catch {
                 print("Error transcribing audio: \(error)")
                 try? FileManager.default.removeItem(at: tempURL)
@@ -136,6 +167,7 @@ struct ContentView: View {
     @StateObject private var viewModel = ContentViewModel()
     @StateObject private var permissionsManager = PermissionsManager()
     @State private var isSettingsPresented = false
+    @State private var settingsInitialTab = 0
     @State private var searchText = ""
     @State private var showDeleteConfirmation = false
 
@@ -420,7 +452,29 @@ struct ContentView: View {
         }
         .fileDropHandler()
         .sheet(isPresented: $isSettingsPresented) {
-            SettingsView()
+            SettingsView(initialTab: settingsInitialTab)
+        }
+        .alert("Model Not Available", isPresented: $viewModel.showModelError) {
+            Button("Open Settings") {
+                settingsInitialTab = 1  // Model tab
+                isSettingsPresented = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(viewModel.modelErrorMessage)\n\nPlease download a model in Settings to use transcription.")
+        }
+        .onChange(of: isSettingsPresented) { _, isPresented in
+            // Reset to default tab when settings is closed
+            if !isPresented {
+                settingsInitialTab = 0
+            }
+        }
+        .onAppear {
+            // Check if model is missing at launch and show alert
+            if let error = TranscriptionService.shared.modelLoadError {
+                viewModel.modelErrorMessage = error
+                viewModel.showModelError = true
+            }
         }
         .focusable()
         .onKeyPress(.space) {

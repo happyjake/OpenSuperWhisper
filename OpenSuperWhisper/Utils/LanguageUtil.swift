@@ -32,9 +32,9 @@ class LanguageUtil {
     static func getSystemLanguage() -> String {
         if let preferredLanguage = Locale.preferredLanguages.first {
             let preferredLanguage = preferredLanguage.prefix(2).lowercased()
-            return availableLanguages.contains(preferredLanguage) ? preferredLanguage : "en"
+            return availableLanguages.contains(preferredLanguage) ? preferredLanguage : "auto"
         } else {
-            return "eng"
+            return "auto"
         }
     }
 }
