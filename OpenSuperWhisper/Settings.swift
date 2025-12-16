@@ -72,7 +72,8 @@ class SettingsViewModel: ObservableObject {
     var currentEditingPrompt: String {
         get {
             let lang = selectedLanguage == "auto" ? editingPromptLanguage : selectedLanguage
-            if let userPrompt = languagePrompts[lang], !userPrompt.isEmpty {
+            // Return user's prompt even if empty - only use default when no entry exists
+            if let userPrompt = languagePrompts[lang] {
                 return userPrompt
             }
             return LanguageUtil.defaultPrompts[lang] ?? ""

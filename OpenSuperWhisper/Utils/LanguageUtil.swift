@@ -55,7 +55,7 @@ class LanguageUtil {
     /// Default initial prompts for each language to guide transcription
     static let defaultPrompts: [String: String] = [
         "auto": "",
-        "en": "Hello.",
+        "en": "I mean.",
         "zh": "以下是普通话的句子。",
         "ja": "以下は日本語の文章です。",
         "ko": "다음은 한국어 문장입니다.",
@@ -78,7 +78,8 @@ class LanguageUtil {
 
     /// Get the effective prompt for a language (user-customized or default)
     static func getEffectivePrompt(for language: String, userPrompts: [String: String]) -> String {
-        if let userPrompt = userPrompts[language], !userPrompt.isEmpty {
+        // If user has explicitly set a prompt (even if empty), use it
+        if let userPrompt = userPrompts[language] {
             return userPrompt
         }
         return defaultPrompts[language] ?? ""
@@ -87,7 +88,8 @@ class LanguageUtil {
     /// Check if user has customized a prompt (different from default)
     static func isCustomPrompt(for language: String, userPrompts: [String: String]) -> Bool {
         guard let userPrompt = userPrompts[language] else { return false }
-        return !userPrompt.isEmpty && userPrompt != (defaultPrompts[language] ?? "")
+        // Empty is a valid customization if the default isn't empty
+        return userPrompt != (defaultPrompts[language] ?? "")
     }
 
     static func getSystemLanguage() -> String {
