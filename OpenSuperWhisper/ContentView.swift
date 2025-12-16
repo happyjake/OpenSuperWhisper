@@ -303,114 +303,32 @@ struct ContentView: View {
                             }
                         }
                     }
+                    // Bottom bar only - no mic button
                     .safeAreaInset(edge: .bottom) {
-                        // Bottom bar with floating record button
-                        VStack(spacing: 0) {
-                            // Floating record button with liquid glass background
-                            Button(action: {
-                                if viewModel.isRecording {
-                                    viewModel.startDecoding()
-                                } else if viewModel.state == .idle {
-                                    viewModel.startRecording()
-                                }
-                            }) {
-                                switch viewModel.state {
-                                case .decoding:
-                                    ProgressView()
-                                        .controlSize(.large)
-                                        .frame(width: 120, height: 120)
-                                case .copied:
-                                    CopiedButton()
-                                        .frame(width: 120, height: 120)
-                                default:
-                                    AmplitudeRingRecordButton(state: viewModel.state)
+                        HStack(alignment: .center) {
+                            // Left: shortcut hint (minimal)
+                            if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
+                                HStack(spacing: 4) {
+                                    Text(shortcut.description)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Text("mini recorder")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary.opacity(0.6))
                                 }
                             }
-                            .buttonStyle(.plain)
-                            .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding || viewModel.state == .copied)
-                            .background {
-                                ZStack {
-                                    // Soft outer glow - very blurred
-                                    Circle()
-                                        .fill(Color.white.opacity(0.6))
-                                        .frame(width: 95, height: 95)
-                                        .blur(radius: 15)
 
-                                    // Glass body - soft gradient
-                                    Circle()
-                                        .fill(
-                                            RadialGradient(
-                                                colors: [
-                                                    Color.white.opacity(0.95),
-                                                    Color.white.opacity(0.85),
-                                                    Color(white: 0.92).opacity(0.9)
-                                                ],
-                                                center: .topLeading,
-                                                startRadius: 0,
-                                                endRadius: 80
-                                            )
-                                        )
-                                        .frame(width: 84, height: 84)
-                                        .blur(radius: 0.5)
-                                }
-                                .shadow(color: .black.opacity(0.12), radius: 20, y: 10)
-                            }
-                            .padding(.bottom, 8)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isRecording)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.state)
+                            Spacer()
 
-                            // Minimal bottom bar
-                            HStack(alignment: .center) {
-                                // Left: shortcut hint (minimal)
-                                if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
-                                    HStack(spacing: 4) {
-                                        Text(shortcut.description)
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                        Text("mini recorder")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary.opacity(0.6))
-                                    }
-                                }
+                            // Right: controls
+                            HStack(spacing: 8) {
+                                MicrophonePickerIconView(microphoneService: viewModel.microphoneService, permissionsManager: viewModel.permissionsManager, isRecording: viewModel.isRecording)
 
-                                Spacer()
-
-                                // Right: controls
-                                HStack(spacing: 8) {
-                                    MicrophonePickerIconView(microphoneService: viewModel.microphoneService, permissionsManager: viewModel.permissionsManager, isRecording: viewModel.isRecording)
-
-                                    if !viewModel.recordingStore.recordings.isEmpty {
-                                        Button(action: {
-                                            showDeleteConfirmation = true
-                                        }) {
-                                            Image(systemName: "trash")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.secondary)
-                                                .frame(width: 28, height: 28)
-                                                .background(Color(NSColor.controlBackgroundColor))
-                                                .cornerRadius(6)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help("Delete all recordings")
-                                        .confirmationDialog(
-                                            "Delete All Recordings",
-                                            isPresented: $showDeleteConfirmation,
-                                            titleVisibility: .visible
-                                        ) {
-                                            Button("Delete All", role: .destructive) {
-                                                viewModel.recordingStore.deleteAllRecordings()
-                                            }
-                                            Button("Cancel", role: .cancel) {}
-                                        } message: {
-                                            Text("Are you sure you want to delete all recordings? This action cannot be undone.")
-                                        }
-                                        .interactiveDismissDisabled()
-                                    }
-
+                                if !viewModel.recordingStore.recordings.isEmpty {
                                     Button(action: {
-                                        openWindow(id: "settings")
+                                        showDeleteConfirmation = true
                                     }) {
-                                        Image(systemName: "gear")
+                                        Image(systemName: "trash")
                                             .font(.system(size: 14))
                                             .foregroundColor(.secondary)
                                             .frame(width: 28, height: 28)
@@ -418,19 +336,103 @@ struct ContentView: View {
                                             .cornerRadius(6)
                                     }
                                     .buttonStyle(.plain)
-                                    .help("Settings")
+                                    .help("Delete all recordings")
+                                    .confirmationDialog(
+                                        "Delete All Recordings",
+                                        isPresented: $showDeleteConfirmation,
+                                        titleVisibility: .visible
+                                    ) {
+                                        Button("Delete All", role: .destructive) {
+                                            viewModel.recordingStore.deleteAllRecordings()
+                                        }
+                                        Button("Cancel", role: .cancel) {}
+                                    } message: {
+                                        Text("Are you sure you want to delete all recordings? This action cannot be undone.")
+                                    }
+                                    .interactiveDismissDisabled()
                                 }
+
+                                Button(action: {
+                                    openWindow(id: "settings")
+                                }) {
+                                    Image(systemName: "gear")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 28, height: 28)
+                                        .background(Color(NSColor.controlBackgroundColor))
+                                        .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Settings")
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(.regularMaterial)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.regularMaterial)
                     }
                 }
             }
         }
         .frame(minWidth: 400, idealWidth: 400)
         .background(Color(NSColor.windowBackgroundColor))
+        // Floating mic button overlay - allows click-through to recordings behind
+        .overlay(alignment: .bottom) {
+            if permissionsManager.isMicrophonePermissionGranted {
+                Button(action: {
+                    if viewModel.isRecording {
+                        viewModel.startDecoding()
+                    } else if viewModel.state == .idle {
+                        viewModel.startRecording()
+                    }
+                }) {
+                    switch viewModel.state {
+                    case .decoding:
+                        ProgressView()
+                            .controlSize(.large)
+                            .frame(width: 120, height: 120)
+                    case .copied:
+                        CopiedButton()
+                            .frame(width: 120, height: 120)
+                    default:
+                        AmplitudeRingRecordButton(state: viewModel.state)
+                    }
+                }
+                .buttonStyle(.plain)
+                .contentShape(Circle().size(width: 84, height: 84).offset(x: 18, y: 18))
+                .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding || viewModel.state == .copied)
+                .background {
+                    ZStack {
+                        // Soft outer glow - very blurred
+                        Circle()
+                            .fill(Color.white.opacity(0.6))
+                            .frame(width: 95, height: 95)
+                            .blur(radius: 15)
+
+                        // Glass body - soft gradient
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color.white.opacity(0.95),
+                                        Color.white.opacity(0.85),
+                                        Color(white: 0.92).opacity(0.9)
+                                    ],
+                                    center: .topLeading,
+                                    startRadius: 0,
+                                    endRadius: 80
+                                )
+                            )
+                            .frame(width: 84, height: 84)
+                            .blur(radius: 0.5)
+                    }
+                    .shadow(color: .black.opacity(0.12), radius: 20, y: 10)
+                    .allowsHitTesting(false)
+                }
+                .padding(.bottom, 52)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isRecording)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.state)
+            }
+        }
         .overlay {
             let isPermissionsGranted = permissionsManager.isMicrophonePermissionGranted
                 && permissionsManager.isAccessibilityPermissionGranted
