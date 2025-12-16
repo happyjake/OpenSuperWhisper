@@ -29,6 +29,29 @@ class LanguageUtil {
         "fi": "Finnish",
     ]
 
+    static let shortCodes: [String: String] = [
+        "auto": "AUTO",
+        "en": "EN",
+        "zh": "ZH",
+        "de": "DE",
+        "es": "ES",
+        "ru": "RU",
+        "ko": "KO",
+        "fr": "FR",
+        "ja": "JA",
+        "pt": "PT",
+        "tr": "TR",
+        "pl": "PL",
+        "ca": "CA",
+        "nl": "NL",
+        "ar": "AR",
+        "sv": "SV",
+        "it": "IT",
+        "id": "ID",
+        "hi": "HI",
+        "fi": "FI",
+    ]
+
     /// Default initial prompts for each language to guide transcription
     static let defaultPrompts: [String: String] = [
         "auto": "",

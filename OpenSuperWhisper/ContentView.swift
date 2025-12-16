@@ -322,6 +322,7 @@ struct ContentView: View {
 
                             // Right: controls
                             HStack(spacing: 8) {
+                                LanguagePickerIconView()
                                 MicrophonePickerIconView(microphoneService: viewModel.microphoneService, permissionsManager: viewModel.permissionsManager, isRecording: viewModel.isRecording)
 
                                 if !viewModel.recordingStore.recordings.isEmpty {
@@ -872,6 +873,61 @@ struct TranscriptionDetailView: View {
         // Update local display text and return to read-only mode (don't dismiss)
         displayText = editableText
         isEditing = false
+    }
+}
+
+struct LanguagePickerIconView: View {
+    @State private var showMenu = false
+    @State private var selectedLanguage = AppPreferences.shared.whisperLanguage
+
+    private var displayCode: String {
+        LanguageUtil.shortCodes[selectedLanguage] ?? selectedLanguage.uppercased()
+    }
+
+    var body: some View {
+        Button(action: {
+            showMenu.toggle()
+        }) {
+            HStack(spacing: 4) {
+                Image(systemName: "globe")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text(displayCode)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+        .help(LanguageUtil.languageNames[selectedLanguage] ?? "Language")
+        .popover(isPresented: $showMenu, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(LanguageUtil.availableLanguages, id: \.self) { code in
+                    Button(action: {
+                        selectedLanguage = code
+                        AppPreferences.shared.whisperLanguage = code
+                        showMenu = false
+                    }) {
+                        HStack {
+                            Text(LanguageUtil.languageNames[code] ?? code)
+                            Spacer()
+                            if code == selectedLanguage {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(minWidth: 160)
+            .padding(.vertical, 8)
+        }
     }
 }
 
