@@ -52,7 +52,7 @@ class OnboardingViewModel: ObservableObject {
         }
 
         // Trigger CoreML download in background if available
-        if let coreMLURL = model.url.coreMLEncoderURL {
+        if model.hasCoreML, let coreMLURL = model.url.coreMLEncoderURL {
             print("Starting CoreML encoder download in background...")
             WhisperModelManager.shared.downloadCoreMLInBackground(from: coreMLURL, for: filename)
         }

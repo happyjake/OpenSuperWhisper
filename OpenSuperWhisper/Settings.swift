@@ -454,12 +454,9 @@ struct SettingsView: View {
     private func getCoreMLState(for model: DownloadableModel) -> CoreMLState {
         let modelName = model.filename
 
-        // Check if quantized
-        let quantizedSuffixes = ["-q5_0.bin", "-q5_1.bin", "-q8_0.bin"]
-        for suffix in quantizedSuffixes {
-            if modelName.contains(suffix) {
-                return .notAvailable
-            }
+        // Check if model supports CoreML (explicit flag)
+        if !model.hasCoreML {
+            return .notAvailable
         }
 
         // Check if downloading
@@ -1089,7 +1086,7 @@ struct SettingsView: View {
                 }
 
                 // Trigger CoreML download in background if available
-                if let coreMLURL = model.url.coreMLEncoderURL {
+                if model.hasCoreML, let coreMLURL = model.url.coreMLEncoderURL {
                     print("Starting CoreML encoder download in background...")
                     WhisperModelManager.shared.downloadCoreMLInBackground(from: coreMLURL, for: filename)
                 }

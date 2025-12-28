@@ -13,10 +13,12 @@ import SwiftUI
 struct DownloadableModel: Identifiable {
     let id = UUID()
     let name: String
+    let description: String
     let url: URL
     let size: Int
     let speedRate: Int
     let accuracyRate: Int
+    let hasCoreML: Bool
 
     var filename: String { url.lastPathComponent }
 
@@ -32,25 +34,40 @@ struct DownloadableModel: Identifiable {
 
 let availableModels = [
     DownloadableModel(
+        name: "Distil large V3.5",
+        description: "1.5x faster, best for short-form transcription",
+        url: URL(string: "https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-model.bin?download=true")!,
+        size: 1520,
+        speedRate: 90,
+        accuracyRate: 95,
+        hasCoreML: false  // Distil models have different architecture, no CoreML encoder available
+    ),
+    DownloadableModel(
         name: "Turbo V3 large",
+        description: "Best accuracy for long-form transcription",
         url: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true")!,
         size: 1624,
         speedRate: 60,
-        accuracyRate: 100
+        accuracyRate: 100,
+        hasCoreML: true
     ),
     DownloadableModel(
         name: "Turbo V3 medium",
+        description: "Balanced speed/accuracy, quantized (q8_0)",
         url: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin?download=true")!,
         size: 874,
         speedRate: 70,
-        accuracyRate: 70
+        accuracyRate: 70,
+        hasCoreML: false  // Quantized models don't have CoreML encoders
     ),
     DownloadableModel(
         name: "Turbo V3 small",
+        description: "Fastest, quantized (q5_0), lower accuracy",
         url: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true")!,
         size: 574,
         speedRate: 100,
-        accuracyRate: 60
+        accuracyRate: 60,
+        hasCoreML: false  // Quantized models don't have CoreML encoders
     )
 ]
 
@@ -130,6 +147,10 @@ struct ModelRowView: View {
                     }
                 }
 
+                Text(model.description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
                 HStack(spacing: 16) {
                     Text(model.sizeString)
                         .font(.subheadline)
@@ -168,6 +189,12 @@ struct ModelRowView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .frame(width: 35)
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cancel download")
                 }
             } else if hasResumableDownload {
                 HStack(spacing: 6) {
@@ -197,11 +224,39 @@ struct ModelRowView: View {
             }
         }
         .padding(12)
-        .background(showSelectionHighlight && isSelected ? Color.gray.opacity(0.3) : Color(.controlBackgroundColor).opacity(0.5))
+        .background(rowBackground)
+        .overlay(rowBorder)
         .cornerRadius(8)
         .contentShape(Rectangle())
         .onTapGesture {
             onTap?()
+        }
+    }
+
+    private var rowBackground: some View {
+        Group {
+            if showSelectionHighlight && isSelected {
+                Color.accentColor.opacity(0.1)
+            } else if isDownloaded {
+                Color(.controlBackgroundColor).opacity(0.6)
+            } else {
+                Color(.controlBackgroundColor).opacity(0.4)
+            }
+        }
+    }
+
+    private var rowBorder: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .stroke(rowBorderColor, lineWidth: (showSelectionHighlight && isSelected) ? 2 : 1)
+    }
+
+    private var rowBorderColor: Color {
+        if showSelectionHighlight && isSelected {
+            return Color.accentColor.opacity(0.5)
+        } else if isDownloaded {
+            return Color.gray.opacity(0.3)
+        } else {
+            return Color.gray.opacity(0.2)
         }
     }
 }
@@ -299,6 +354,10 @@ struct ModelCardView: View {
                         }
                     }
 
+                    Text(model.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
                     HStack(spacing: 16) {
                         Text(model.sizeString)
                             .font(.subheadline)
@@ -368,6 +427,12 @@ struct ModelCardView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .frame(width: 35)
+                Button(action: onCancelDownload) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Cancel download")
             }
         } else if hasResumableDownload {
             HStack(spacing: 6) {
@@ -402,16 +467,26 @@ struct ModelCardView: View {
             if isActive {
                 Color.accentColor.opacity(0.08)
             } else if isDownloaded {
-                Color(.controlBackgroundColor).opacity(0.5)
+                Color(.controlBackgroundColor).opacity(0.6)
             } else {
-                Color(.controlBackgroundColor).opacity(0.3)
+                Color(.controlBackgroundColor).opacity(0.4)
             }
         }
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 10)
-            .stroke(isActive ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 2)
+            .stroke(borderColor, lineWidth: isActive ? 2 : 1)
+    }
+
+    private var borderColor: Color {
+        if isActive {
+            return Color.accentColor.opacity(0.6)
+        } else if isDownloaded {
+            return Color.gray.opacity(0.3)
+        } else {
+            return Color.gray.opacity(0.2)
+        }
     }
 
     @ViewBuilder
