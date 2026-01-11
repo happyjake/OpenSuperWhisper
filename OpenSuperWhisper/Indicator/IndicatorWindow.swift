@@ -88,23 +88,23 @@ class IndicatorViewModel: ObservableObject {
                     ))
                 }
 
-                // Copy transcribed text to clipboard if enabled
-                let shouldCopy = AppPreferences.shared.autoCopyToClipboard
-                if shouldCopy {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
-                    print("Transcription result (copied to clipboard): \(text)")
-                } else {
-                    print("Transcription result: \(text)")
-                }
+                // Handle clipboard/paste based on user preferences
+                let outputResult = ClipboardUtil.handleTranscriptionOutput(text)
 
-                // Transition to copied state or idle
+                // Transition to appropriate state
                 await MainActor.run {
-                    self.stateManager.finishDecoding(copied: shouldCopy)
+                    switch outputResult {
+                    case .pasted:
+                        self.stateManager.finishDecoding(copied: true, pasted: true)
+                    case .copied:
+                        self.stateManager.finishDecoding(copied: true, pasted: false)
+                    case .none:
+                        self.stateManager.finishDecoding(copied: false, pasted: false)
+                    }
                 }
 
-                // Wait for copied state to show before hiding
-                if shouldCopy {
+                // Wait for copied/pasted state to show before hiding
+                if outputResult != .none {
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 }
 
@@ -250,6 +250,18 @@ struct IndicatorWindow: View {
                         .frame(width: 24)
 
                     Text("Copied!")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            case .pasted:
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.on.clipboard.fill")
+                        .foregroundColor(.green)
+                        .font(.system(size: 16))
+                        .frame(width: 24)
+
+                    Text("Pasted!")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

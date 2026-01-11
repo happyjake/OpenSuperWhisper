@@ -135,6 +135,12 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var autoPasteAfterCopy: Bool {
+        didSet {
+            AppPreferences.shared.autoPasteAfterCopy = autoPasteAfterCopy
+        }
+    }
+
     @Published var isAccessibilityPermissionGranted: Bool = false
     private var accessibilityCheckTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -157,6 +163,7 @@ class SettingsViewModel: ObservableObject {
         self.playSoundOnRecordStart = prefs.playSoundOnRecordStart
         self.useAsianAutocorrect = prefs.useAsianAutocorrect
         self.autoCopyToClipboard = prefs.autoCopyToClipboard
+        self.autoPasteAfterCopy = prefs.autoPasteAfterCopy
 
         // Load language prompts with migration from old initialPrompt
         var loadedPrompts = prefs.languagePrompts
@@ -845,30 +852,131 @@ struct SettingsView: View {
 
                 // Accessibility Permission (Optional)
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Accessibility (Optional)")
-                        .font(Typography.settingsHeader)
-                        .foregroundColor(.primary)
+                    HStack {
+                        Text("Accessibility")
+                            .font(Typography.settingsHeader)
+                            .foregroundColor(.primary)
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: viewModel.isAccessibilityPermissionGranted ? "checkmark.circle.fill" : "info.circle.fill")
-                                .foregroundColor(viewModel.isAccessibilityPermissionGranted ? .green : .blue)
-                            Text("Accessibility Access")
-                                .font(Typography.settingsLabel)
-                            Spacer()
-                            if !viewModel.isAccessibilityPermissionGranted {
-                                Button("Grant Access") {
-                                    viewModel.openAccessibilityPreferences()
+                        if viewModel.isAccessibilityPermissionGranted {
+                            Text("Enabled")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.green)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.green.opacity(0.15))
+                                .cornerRadius(4)
+                        } else {
+                            Text("Optional")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.secondary.opacity(0.15))
+                                .cornerRadius(4)
+                        }
+                    }
+
+                    if viewModel.isAccessibilityPermissionGranted {
+                        // Granted state - show features
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Feature 1: Cursor positioning
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "text.cursor")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Smart indicator positioning")
+                                        .font(Typography.settingsBody)
+                                    Text("Recording indicator appears near your text cursor")
+                                        .font(Typography.settingsCaption)
+                                        .foregroundColor(.secondary)
                                 }
-                                .buttonStyle(.bordered)
+                            }
+
+                            // Feature 2: Auto-paste toggle
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "doc.on.clipboard")
+                                    .foregroundColor(viewModel.autoCopyToClipboard ? .accentColor : .secondary)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Toggle(isOn: $viewModel.autoPasteAfterCopy) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Auto-paste after transcription")
+                                                .font(Typography.settingsBody)
+                                                .foregroundColor(viewModel.autoCopyToClipboard ? .primary : .secondary)
+                                            Text("Automatically paste into the active text field")
+                                                .font(Typography.settingsCaption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+                                    .disabled(!viewModel.autoCopyToClipboard)
+
+                                    if !viewModel.autoCopyToClipboard {
+                                        Text("Requires \"Copy transcription to clipboard\" to be enabled")
+                                            .font(Typography.settingsCaption)
+                                            .foregroundColor(.orange)
+                                    }
+                                }
                             }
                         }
 
-                        Text(viewModel.isAccessibilityPermissionGranted
-                            ? "Recording indicator will appear near your text cursor."
-                            : "Accessibility is optional. Without it, the recording indicator will appear near your mouse cursor instead of the text caret. Keyboard shortcuts work without this permission.")
-                            .font(Typography.settingsCaption)
-                            .foregroundColor(.secondary)
+                        Divider()
+
+                        HStack {
+                            Text("Manage in System Settings")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button("Open Settings") {
+                                viewModel.openAccessibilityPreferences()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    } else {
+                        // Not granted state - show explanation and grant button
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Grant accessibility access to enable additional features:")
+                                .font(Typography.settingsBody)
+                                .foregroundColor(.secondary)
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "text.cursor")
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 16)
+                                    Text("Position indicator near text cursor")
+                                        .font(Typography.settingsCaption)
+                                        .foregroundColor(.secondary)
+                                }
+                                HStack(spacing: 8) {
+                                    Image(systemName: "doc.on.clipboard")
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 16)
+                                    Text("Auto-paste transcription into text fields")
+                                        .font(Typography.settingsCaption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.leading, 4)
+
+                            Button(action: {
+                                viewModel.openAccessibilityPreferences()
+                            }) {
+                                HStack {
+                                    Image(systemName: "lock.shield")
+                                    Text("Grant Access")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .padding(.top, 4)
+
+                            Text("Keyboard shortcuts work without this permission.")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                                .italic()
+                        }
                     }
                 }
                 .padding()

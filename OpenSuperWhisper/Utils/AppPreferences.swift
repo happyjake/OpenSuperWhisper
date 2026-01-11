@@ -65,7 +65,10 @@ final class AppPreferences {
 
     @UserDefault(key: "autoCopyToClipboard", defaultValue: true)
     var autoCopyToClipboard: Bool
-    
+
+    @UserDefault(key: "autoPasteAfterCopy", defaultValue: false)
+    var autoPasteAfterCopy: Bool
+
     @UserDefault(key: "hasCompletedOnboarding", defaultValue: false)
     var hasCompletedOnboarding: Bool
     

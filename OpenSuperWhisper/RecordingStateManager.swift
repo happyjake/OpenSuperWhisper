@@ -13,6 +13,7 @@ class RecordingStateManager: ObservableObject {
         case recording
         case decoding
         case copied
+        case pasted
     }
 
     @Published var state: State = .idle
@@ -26,6 +27,7 @@ class RecordingStateManager: ObservableObject {
     var isRecording: Bool { state == .recording }
     var isDecoding: Bool { state == .decoding }
     var isCopied: Bool { state == .copied }
+    var isPasted: Bool { state == .pasted }
 
     private init() {}
 
@@ -90,9 +92,20 @@ class RecordingStateManager: ObservableObject {
     }
 
     /// Called after transcription completes.
-    /// If copied is true, shows the "Copied" state briefly before hiding.
-    func finishDecoding(copied: Bool) {
-        if copied {
+    /// Shows the appropriate state (copied/pasted) briefly before hiding.
+    func finishDecoding(copied: Bool, pasted: Bool = false) {
+        if pasted {
+            state = .pasted
+            // Auto-transition to idle after 1 second
+            Task {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                await MainActor.run {
+                    if self.state == .pasted {
+                        self.state = .idle
+                    }
+                }
+            }
+        } else if copied {
             state = .copied
             // Auto-transition to idle after 1 second
             Task {

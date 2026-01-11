@@ -109,6 +109,8 @@ struct AmplitudeRingRecordButton: View {
             label = "Processing transcription"
         case .copied:
             label = "Text copied"
+        case .pasted:
+            label = "Text pasted"
         }
 
         if meterService.isClipping && state == .recording {
@@ -126,7 +128,7 @@ struct AmplitudeRingRecordButton: View {
             return "Press to stop recording"
         case .decoding:
             return "Please wait"
-        case .copied:
+        case .copied, .pasted:
             return "Recording complete"
         }
     }
