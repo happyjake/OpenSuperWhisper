@@ -1,77 +1,77 @@
 # OpenSuperWhisper
 
-OpenSuperWhisper is a macOS application that provides real-time audio transcription using the Whisper model. It offers a seamless way to record and transcribe audio with customizable settings and keyboard shortcuts.
+A powerful macOS menu bar app for local speech-to-text transcription using [whisper.cpp](https://github.com/ggerganov/whisper.cpp). Runs entirely offline with downloaded Whisper models.
 
 <p align="center">
-<img src="docs/image.png" width="400" /> <img src="docs/image_indicator.png" width="400" />
+<img src="docs/image.jpg" width="400" /> <img src="docs/image_indicator.jpg" width="400" />
 </p>
-
-Free alternative to paid services like:
-* https://tryvoiceink.com
-* https://goodsnooze.gumroad.com/l/macwhisper
-* and etc..
-
-## Installation
-
-```shell
-brew update # Optional
-brew install opensuperwhisper
-```
-
-Or from [github releases page](https://github.com/Starmel/OpenSuperWhisper/releases).
 
 ## Features
 
-- 🎙️ Real-time audio recording and transcription
-- ⌨️ Global keyboard shortcuts for quick recording (use ```cmd + ` ```)
-- 🌍 Support for multiple languages with auto-detection (not tested, but probably works)
-- 🔄 Optional translation to English (for better translation add initial prompt with english sentences)
-- 💾 Local storage of recordings with transcriptions
-- 🎛️ Advanced transcription settings (not tested)
-- 🇯🇵🇨🇳🇰🇷 Support for Asian languages with [auto-correct](https://github.com/huacnlee/autocorrect)
+- 🎙️ **Local Transcription** - Runs entirely offline using Whisper models
+- ⌨️ **Global Shortcuts** - Quick recording with customizable hotkeys (default: `Option + Backtick`)
+- 📋 **Auto-Paste** - Automatically paste transcriptions into the active text field (with Accessibility permission)
+- 🔊 **System Audio Capture** - Transcribe audio from any app playing on your Mac
+- 🌍 **Multi-Language** - Auto-detect language or select from 50+ supported languages
+- 🇯🇵🇨🇳🇰🇷 **Asian Language Support** - Smart formatting for CJK text with [autocorrect](https://github.com/huacnlee/autocorrect)
+- ⚡ **CoreML Acceleration** - Optional Neural Engine support for faster transcription
+- 📥 **Resumable Downloads** - Download models with pause/resume support
+- 💾 **Recording History** - Search and manage past transcriptions
+
+## Installation
+
+Download the latest DMG from the [Releases page](https://github.com/happyjake/OpenSuperWhisper/releases).
+
+Or build from source (see below).
 
 ## Requirements
 
-- macOS (Apple Silicon/ARM64)
+- macOS 14.0 or later
+- Apple Silicon (M1/M2/M3)
 
-## Support
+## Usage
 
-If you encounter any issues or have questions, please:
-1. Check the existing issues in the repository
-2. Create a new issue with detailed information about your problem
-3. Include system information and logs when reporting bugs
+1. **First Launch**: Grant microphone permission when prompted
+2. **Record**: Press `Option + Backtick` (or your custom shortcut) to start/stop recording
+3. **Transcription**: Text is automatically copied to clipboard after transcription
+4. **Auto-Paste** (Optional): Enable in Settings > Shortcuts > Accessibility to auto-paste into text fields
 
-# Building locally
+### Permissions
 
-To build locally, you'll need:
+- **Microphone**: Required for voice recording
+- **Accessibility** (Optional): Enables auto-paste and positions the indicator near your text cursor
+- **System Audio** (Optional): Required to capture audio from other apps
 
-    git clone git@github.com:Starmel/OpenSuperWhisper.git
-    cd OpenSuperWhisper
-    git submodule update --init --recursive
-    brew install cmake libomp rust ruby
-    gem install xcpretty
-    ./run.sh build
+## Building from Source
 
-In case of problems, consult `.github/workflows/build.yml` which is our CI workflow
-where the app gets built automatically on GitHub's CI.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit pull requests or create issues for bugs and feature requests.
-
-### Contribution TODO list
-
-- [ ] Streaming transcription ([#22](https://github.com/Starmel/OpenSuperWhisper/issues/22))
-- [ ] Custom dictionary ([#20](https://github.com/Starmel/OpenSuperWhisper/issues/35))
-- [ ] Intel macOS compatibility ([#16](https://github.com/Starmel/OpenSuperWhisper/issues/16))
-- [ ] Agent mode ([#14](https://github.com/Starmel/OpenSuperWhisper/issues/14))
-- [x] Background app ([#9](https://github.com/Starmel/OpenSuperWhisper/issues/9))
-- [x] Support long-press single key audio recording ([#19](https://github.com/Starmel/OpenSuperWhisper/issues/19))
-
-## License
-
-OpenSuperWhisper is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+```bash
+git clone https://github.com/happyjake/OpenSuperWhisper.git
+cd OpenSuperWhisper
+git submodule update --init --recursive
+brew install cmake libomp rust ruby
+gem install xcpretty
+./run.sh
+```
 
 ## Whisper Models
 
-You can download Whisper model files (`.bin`) from the [Whisper.cpp Hugging Face repository](https://huggingface.co/ggerganov/whisper.cpp/tree/main). Place the downloaded `.bin` files in the app's models directory. On first launch, the app will attempt to copy a default model automatically, but you can add more models manually.
+Models are downloaded automatically from Hugging Face. Available models:
+
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| tiny.en | 75 MB | Fastest | Good for English |
+| base.en | 142 MB | Fast | Better English |
+| small.en | 466 MB | Medium | Great English |
+| medium.en | 1.5 GB | Slower | Excellent English |
+| large-v3 | 3.1 GB | Slowest | Best multilingual |
+| distil-large-v3.5 | 1.5 GB | Fast | Great multilingual |
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file.
+
+## Credits
+
+This project is a fork of [Starmel/OpenSuperWhisper](https://github.com/Starmel/OpenSuperWhisper).
+
+Thanks to the original author for creating this excellent open-source alternative to paid transcription services.
