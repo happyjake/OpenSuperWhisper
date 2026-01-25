@@ -2069,3 +2069,337 @@ struct LLMModelCardView: View {
     }
 }
 
+// MARK: - Dictionary Helper Views
+
+struct DictionaryTermRow: View {
+    let entry: DictionaryEntry
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Category icon
+            Image(systemName: entry.category.icon)
+                .foregroundColor(.accentColor)
+                .frame(width: 20)
+
+            // Term info
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.term)
+                        .font(.headline)
+
+                    // Priority indicator
+                    HStack(spacing: 1) {
+                        ForEach(0..<entry.priority, id: \.self) { _ in
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+
+                if !entry.aliases.isEmpty {
+                    Text(entry.aliases.joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            // Category badge
+            Text(entry.category.displayName)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.15))
+                .cornerRadius(4)
+
+            // Actions
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Edit term")
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundColor(.red.opacity(0.7))
+            }
+            .buttonStyle(.plain)
+            .help("Delete term")
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct AddEditTermSheet: View {
+    @Environment(\.dismiss) var dismiss
+
+    let entry: DictionaryEntry?
+    let onSave: (DictionaryEntry) -> Void
+
+    @State private var term: String = ""
+    @State private var aliasesText: String = ""
+    @State private var category: TermCategory = .general
+    @State private var priority: Int = 3
+    @State private var notes: String = ""
+    @State private var caseSensitive: Bool = true
+
+    var isEditing: Bool { entry != nil }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text(isEditing ? "Edit Term" : "Add Term")
+                    .font(.headline)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+
+            Divider()
+
+            // Form
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Term field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Term")
+                            .font(Typography.settingsLabel)
+                        TextField("e.g., ClockoSocket", text: $term)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    // Aliases field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Aliases (comma-separated)")
+                            .font(Typography.settingsLabel)
+                        TextField("e.g., clock o socket, cloco socket", text: $aliasesText)
+                            .textFieldStyle(.roundedBorder)
+                        Text("Alternative spellings or phonetic variants")
+                            .font(Typography.settingsCaption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    // Category picker
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Category")
+                            .font(Typography.settingsLabel)
+                        Picker("", selection: $category) {
+                            ForEach(TermCategory.allCases, id: \.self) { cat in
+                                Label(cat.displayName, systemImage: cat.icon)
+                                    .tag(cat)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    // Priority stepper
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Priority")
+                            .font(Typography.settingsLabel)
+                        HStack {
+                            Stepper(value: $priority, in: 1...5) {
+                                HStack(spacing: 2) {
+                                    ForEach(0..<priority, id: \.self) { _ in
+                                        Image(systemName: "star.fill")
+                                            .foregroundColor(.orange)
+                                    }
+                                    ForEach(0..<(5 - priority), id: \.self) { _ in
+                                        Image(systemName: "star")
+                                            .foregroundColor(.secondary.opacity(0.5))
+                                    }
+                                }
+                            }
+                            Spacer()
+                        }
+                        Text("Higher priority terms are preferred in Whisper's initial prompt")
+                            .font(Typography.settingsCaption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    // Case sensitive toggle
+                    Toggle(isOn: $caseSensitive) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Case Sensitive")
+                                .font(Typography.settingsBody)
+                            Text("Preserve exact casing when replaced")
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+
+                    // Notes field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Notes (optional)")
+                            .font(Typography.settingsLabel)
+                        TextEditor(text: $notes)
+                            .font(Typography.settingsBody)
+                            .frame(height: 60)
+                            .padding(4)
+                            .background(Color(.textBackgroundColor))
+                            .cornerRadius(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                }
+                .padding()
+            }
+
+            Divider()
+
+            // Footer buttons
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+
+                Spacer()
+
+                Button(isEditing ? "Save" : "Add") {
+                    saveEntry()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(term.trimmingCharacters(in: .whitespaces).isEmpty)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding()
+        }
+        .frame(width: 400, height: 500)
+        .onAppear {
+            if let entry = entry {
+                term = entry.term
+                aliasesText = entry.aliases.joined(separator: ", ")
+                category = entry.category
+                priority = entry.priority
+                notes = entry.notes ?? ""
+                caseSensitive = entry.caseSensitive
+            }
+        }
+    }
+
+    private func saveEntry() {
+        let aliases = aliasesText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        let newEntry = DictionaryEntry(
+            id: entry?.id ?? UUID(),
+            term: term.trimmingCharacters(in: .whitespaces),
+            aliases: aliases,
+            category: category,
+            caseSensitive: caseSensitive,
+            priority: priority,
+            notes: notes.isEmpty ? nil : notes,
+            createdAt: entry?.createdAt ?? Date(),
+            updatedAt: Date()
+        )
+
+        onSave(newEntry)
+        dismiss()
+    }
+}
+
+struct SuggestTermsSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var dictionaryManager: DictionaryManager
+    let onAddTerm: (String) -> Void
+
+    @State private var suggestions: [String] = []
+    @State private var clipboardText: String = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Suggest Terms")
+                    .font(.headline)
+                Spacer()
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+
+            Divider()
+
+            if suggestions.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "lightbulb")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("No suggestions found")
+                        .font(Typography.settingsBody)
+                        .foregroundColor(.secondary)
+                    Text("Copy some transcription text to your clipboard, then open this sheet again.")
+                        .font(Typography.settingsCaption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        HStack {
+                            Text(suggestion)
+                                .font(Typography.settingsBody)
+                            Spacer()
+                            Button("Add") {
+                                onAddTerm(suggestion)
+                                suggestions.removeAll { $0 == suggestion }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                }
+                .listStyle(.plain)
+            }
+
+            Divider()
+
+            HStack {
+                Text("\(suggestions.count) suggestions")
+                    .font(Typography.settingsCaption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding()
+        }
+        .frame(width: 350, height: 400)
+        .onAppear {
+            loadSuggestions()
+        }
+    }
+
+    private func loadSuggestions() {
+        if let text = NSPasteboard.general.string(forType: .string) {
+            clipboardText = text
+            suggestions = dictionaryManager.suggestTerms(from: text)
+        }
+    }
+}
+
