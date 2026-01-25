@@ -376,7 +376,74 @@ class TranscriptionService: ObservableObject {
                 print("TranscriptionService: Applying Asian autocorrect for language: \(effectiveLanguage)")
                 processedText = AutocorrectWrapper.format(cleanedText)
             }
-            
+
+            // Apply local LLM post-processing if enabled (llama.cpp)
+            if settings.isLLMEnabled && !processedText.isEmpty {
+                print("TranscriptionService: Applying local LLM processing with mode: \(settings.llmProcessingMode.rawValue)")
+
+                // Get the LLM service
+                if let llmService = LLMServiceFactory.shared.getService(backend: settings.llmBackendType) {
+                    // Check readiness
+                    let readiness = await llmService.readiness
+                    if readiness == .modelLoaded {
+                        do {
+                            let result = try await llmService.process(
+                                text: processedText,
+                                mode: settings.llmProcessingMode,
+                                customPrompt: settings.llmCustomPrompt
+                            )
+                            processedText = result.text
+                            print("TranscriptionService: Local LLM processing completed in \(result.processingTimeMs)ms")
+                        } catch {
+                            // Log error but preserve original text
+                            print("TranscriptionService: Local LLM processing failed: \(error.localizedDescription)")
+                        }
+                    } else if readiness == .modelDownloaded {
+                        // Model exists but not loaded - try to load it
+                        do {
+                            if let modelPath = settings.llmModelPath {
+                                try await llmService.loadModel(at: URL(fileURLWithPath: modelPath))
+                                let result = try await llmService.process(
+                                    text: processedText,
+                                    mode: settings.llmProcessingMode,
+                                    customPrompt: settings.llmCustomPrompt
+                                )
+                                processedText = result.text
+                                print("TranscriptionService: Local LLM processing completed (after load) in \(result.processingTimeMs)ms")
+                            }
+                        } catch {
+                            print("TranscriptionService: Local LLM failed to load/process: \(error.localizedDescription)")
+                        }
+                    } else {
+                        print("TranscriptionService: Local LLM not ready (state: \(readiness.displayName))")
+                    }
+                }
+            }
+
+            // Apply LLM editor if enabled (remote API - runs after local LLM)
+            let prefs = AppPreferences.shared
+            if prefs.editorEnabled && prefs.editorBackend != .disabled && !processedText.isEmpty {
+                print("TranscriptionService: Applying LLM editor with mode: \(prefs.editorOutputMode.rawValue)")
+
+                // Build metadata for editor context
+                let metadata = EditorMetadata(
+                    audioDurationMs: Int(durationInSeconds * 1000),
+                    whisperModel: AppPreferences.shared.selectedModelPath?.components(separatedBy: "/").last,
+                    detectedLanguage: effectiveLanguage
+                )
+
+                // Run the async editor call (EditorCoordinator handles errors and fallback internally)
+                let textToEdit = processedText
+                processedText = await EditorCoordinator.shared.edit(
+                    raw: textToEdit,
+                    mode: prefs.editorOutputMode,
+                    glossary: [],  // TODO: Load from user dictionary when implemented
+                    language: effectiveLanguage,
+                    metadata: metadata
+                )
+                print("TranscriptionService: LLM editor completed")
+            }
+
             let finalText = processedText.isEmpty ? "No speech detected in the audio" : processedText
             
             await MainActor.run {

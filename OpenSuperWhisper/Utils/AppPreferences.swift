@@ -97,4 +97,89 @@ final class AppPreferences {
             }
         }
     }
+
+    // MARK: - LLM Post-Processing Settings
+
+    /// LLM processing mode (none, cleanup, summarize, formatAsBullets, custom)
+    @UserDefault(key: "llmProcessingMode", defaultValue: "none")
+    var llmProcessingModeRaw: String
+
+    /// Custom prompt for LLM processing (used when mode is "custom")
+    @OptionalUserDefault(key: "llmCustomPrompt")
+    var llmCustomPrompt: String?
+
+    /// Path to local LLM model file (for llama.cpp backend)
+    @OptionalUserDefault(key: "llmModelPath")
+    var llmModelPath: String?
+
+    /// Timeout for LLM processing in seconds
+    @UserDefault(key: "llmTimeoutSeconds", defaultValue: 30)
+    var llmTimeoutSeconds: Int
+
+    /// Whether to auto-load the LLM model on app startup
+    @UserDefault(key: "llmAutoLoadModel", defaultValue: true)
+    var llmAutoLoadModel: Bool
+
+    /// LLM backend type (auto, appleFoundation, llamaCpp)
+    @UserDefault(key: "llmBackendType", defaultValue: "auto")
+    var llmBackendTypeRaw: String
+
+    // Computed property for type-safe LLM processing mode access
+    var llmProcessingMode: LLMProcessingMode {
+        get { LLMProcessingMode(rawValue: llmProcessingModeRaw) ?? .none }
+        set { llmProcessingModeRaw = newValue.rawValue }
+    }
+
+    // Computed property for type-safe LLM backend type access
+    var llmBackendType: LLMBackendType {
+        get { LLMBackendType(rawValue: llmBackendTypeRaw) ?? .auto }
+        set { llmBackendTypeRaw = newValue.rawValue }
+    }
+
+    // MARK: - LLM Editor Settings (OpenAI-Compatible Remote API)
+
+    @UserDefault(key: "editorEnabled", defaultValue: true)
+    var editorEnabled: Bool
+
+    @UserDefault(key: "editorBackendRaw", defaultValue: "auto")
+    var editorBackendRaw: String
+
+    @OptionalUserDefault(key: "editorEndpointURL")
+    var editorEndpointURL: String?
+
+    @OptionalUserDefault(key: "editorAPIKey")
+    var editorAPIKey: String?
+
+    @UserDefault(key: "editorModelName", defaultValue: "gpt-4o-mini")
+    var editorModelName: String
+
+    @UserDefault(key: "editorTimeoutMs", defaultValue: 10000)
+    var editorTimeoutMs: Int
+
+    @UserDefault(key: "editorMaxTokens", defaultValue: 1024)
+    var editorMaxTokens: Int
+
+    @UserDefault(key: "editorTemperature", defaultValue: 0.2)
+    var editorTemperature: Double
+
+    @UserDefault(key: "editorOutputModeRaw", defaultValue: "clean")
+    var editorOutputModeRaw: String
+
+    // Computed property for type-safe backend access
+    var editorBackend: EditorBackend {
+        get { EditorBackend(rawValue: editorBackendRaw) ?? .auto }
+        set { editorBackendRaw = newValue.rawValue }
+    }
+
+    // Computed property for type-safe output mode access
+    var editorOutputMode: OutputMode {
+        get { OutputMode(rawValue: editorOutputModeRaw) ?? .clean }
+        set { editorOutputModeRaw = newValue.rawValue }
+    }
+
+    // MARK: - Editor Debug Settings
+
+    /// Enable local debug telemetry for the LLM editor
+    @UserDefault(key: "editorDebugEnabled", defaultValue: false)
+    var editorDebugEnabled: Bool
 }

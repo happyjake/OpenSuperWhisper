@@ -13,6 +13,32 @@ class SettingsNavigation: ObservableObject {
     private init() {}
 }
 
+/// Connection status for editor backend
+enum EditorConnectionStatus: Equatable {
+    case unknown
+    case checking
+    case connected(model: String)
+    case error(String)
+
+    var displayText: String {
+        switch self {
+        case .unknown: return "Not tested"
+        case .checking: return "Testing..."
+        case .connected(let model): return "Connected (\(model))"
+        case .error(let msg): return "Error: \(msg)"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .unknown: return .secondary
+        case .checking: return .orange
+        case .connected: return .green
+        case .error: return .red
+        }
+    }
+}
+
 class SettingsViewModel: ObservableObject {
     @Published var selectedModelURL: URL? {
         didSet {
@@ -141,6 +167,84 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Editor Settings
+
+    @Published var editorEnabled: Bool {
+        didSet {
+            AppPreferences.shared.editorEnabled = editorEnabled
+        }
+    }
+
+    @Published var editorBackend: EditorBackend {
+        didSet {
+            AppPreferences.shared.editorBackend = editorBackend
+        }
+    }
+
+    @Published var editorEndpointURL: String {
+        didSet {
+            AppPreferences.shared.editorEndpointURL = editorEndpointURL.isEmpty ? nil : editorEndpointURL
+        }
+    }
+
+    @Published var editorAPIKey: String {
+        didSet {
+            AppPreferences.shared.editorAPIKey = editorAPIKey.isEmpty ? nil : editorAPIKey
+        }
+    }
+
+    @Published var editorModelName: String {
+        didSet {
+            AppPreferences.shared.editorModelName = editorModelName
+        }
+    }
+
+    @Published var editorOutputMode: OutputMode {
+        didSet {
+            AppPreferences.shared.editorOutputMode = editorOutputMode
+        }
+    }
+
+    @Published var editorTemperature: Double {
+        didSet {
+            AppPreferences.shared.editorTemperature = editorTemperature
+        }
+    }
+
+    @Published var editorConnectionStatus: EditorConnectionStatus = .unknown
+
+    // MARK: - Local LLM Settings (llama.cpp)
+
+    @Published var llmProcessingMode: LLMProcessingMode {
+        didSet {
+            AppPreferences.shared.llmProcessingMode = llmProcessingMode
+        }
+    }
+
+    @Published var llmCustomPrompt: String {
+        didSet {
+            AppPreferences.shared.llmCustomPrompt = llmCustomPrompt.isEmpty ? nil : llmCustomPrompt
+        }
+    }
+
+    @Published var llmModelPath: String? {
+        didSet {
+            AppPreferences.shared.llmModelPath = llmModelPath
+        }
+    }
+
+    @Published var llmTimeoutSeconds: Int {
+        didSet {
+            AppPreferences.shared.llmTimeoutSeconds = llmTimeoutSeconds
+        }
+    }
+
+    @Published var llmAutoLoadModel: Bool {
+        didSet {
+            AppPreferences.shared.llmAutoLoadModel = llmAutoLoadModel
+        }
+    }
+
     @Published var isAccessibilityPermissionGranted: Bool = false
     private var accessibilityCheckTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -164,6 +268,22 @@ class SettingsViewModel: ObservableObject {
         self.useAsianAutocorrect = prefs.useAsianAutocorrect
         self.autoCopyToClipboard = prefs.autoCopyToClipboard
         self.autoPasteAfterCopy = prefs.autoPasteAfterCopy
+
+        // Editor settings
+        self.editorEnabled = prefs.editorEnabled
+        self.editorBackend = prefs.editorBackend
+        self.editorEndpointURL = prefs.editorEndpointURL ?? ""
+        self.editorAPIKey = prefs.editorAPIKey ?? ""
+        self.editorModelName = prefs.editorModelName
+        self.editorOutputMode = prefs.editorOutputMode
+        self.editorTemperature = prefs.editorTemperature
+
+        // Local LLM settings
+        self.llmProcessingMode = prefs.llmProcessingMode
+        self.llmCustomPrompt = prefs.llmCustomPrompt ?? ""
+        self.llmModelPath = prefs.llmModelPath
+        self.llmTimeoutSeconds = prefs.llmTimeoutSeconds
+        self.llmAutoLoadModel = prefs.llmAutoLoadModel
 
         // Load language prompts with migration from old initialPrompt
         var loadedPrompts = prefs.languagePrompts
@@ -276,6 +396,14 @@ struct Settings {
     var beamSize: Int
     var useAsianAutocorrect: Bool
 
+    // LLM Post-Processing Settings
+    var llmProcessingMode: LLMProcessingMode
+    var llmCustomPrompt: String?
+    var llmModelPath: String?
+    var llmTimeoutSeconds: Int
+    var llmAutoLoadModel: Bool
+    var llmBackendType: LLMBackendType
+
     init() {
         let prefs = AppPreferences.shared
         self.selectedLanguage = prefs.whisperLanguage
@@ -288,12 +416,25 @@ struct Settings {
         self.useBeamSearch = prefs.useBeamSearch
         self.beamSize = prefs.beamSize
         self.useAsianAutocorrect = prefs.useAsianAutocorrect
+
+        // LLM settings
+        self.llmProcessingMode = prefs.llmProcessingMode
+        self.llmCustomPrompt = prefs.llmCustomPrompt
+        self.llmModelPath = prefs.llmModelPath
+        self.llmTimeoutSeconds = prefs.llmTimeoutSeconds
+        self.llmAutoLoadModel = prefs.llmAutoLoadModel
+        self.llmBackendType = prefs.llmBackendType
     }
 
     /// Get the effective prompt for a language (user-customized or default)
     func getPrompt(for language: String) -> String? {
         let prompt = LanguageUtil.getEffectivePrompt(for: language, userPrompts: languagePrompts)
         return prompt.isEmpty ? nil : prompt
+    }
+
+    /// Whether LLM post-processing is enabled
+    var isLLMEnabled: Bool {
+        llmProcessingMode != .none
     }
 }
 
@@ -318,8 +459,9 @@ struct SettingsView: View {
                 tabButton(title: "Shortcuts", icon: "command", tag: 0)
                 tabButton(title: "Model", icon: "cpu", tag: 1)
                 tabButton(title: "Transcription", icon: "text.bubble", tag: 2)
-                tabButton(title: "Advanced", icon: "gear", tag: 3)
-                tabButton(title: "About", icon: "info.circle", tag: 4)
+                tabButton(title: "Editor", icon: "wand.and.stars", tag: 3)
+                tabButton(title: "Advanced", icon: "gear", tag: 4)
+                tabButton(title: "About", icon: "info.circle", tag: 5)
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -333,8 +475,9 @@ struct SettingsView: View {
                 case 0: shortcutSettings
                 case 1: modelSettings
                 case 2: transcriptionSettings
-                case 3: advancedSettings
-                case 4: aboutSettings
+                case 3: editorSettings
+                case 4: advancedSettings
+                case 5: aboutSettings
                 default: shortcutSettings
                 }
             }
@@ -668,7 +811,357 @@ struct SettingsView: View {
             .padding()
         }
     }
-    
+
+    private var editorSettings: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Enable/Disable Editor
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("LLM Editor")
+                            .font(Typography.settingsHeader)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Toggle("", isOn: $viewModel.editorEnabled)
+                            .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+                            .labelsHidden()
+                    }
+
+                    Text("Use an LLM to clean up transcriptions: fix grammar, remove filler words, and improve formatting.")
+                        .font(Typography.settingsCaption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Color(.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if viewModel.editorEnabled {
+                    // Backend Configuration
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Backend Configuration")
+                            .font(Typography.settingsHeader)
+                            .foregroundColor(.primary)
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Backend picker
+                            HStack {
+                                Text("Backend:")
+                                    .font(Typography.settingsLabel)
+                                Picker("", selection: $viewModel.editorBackend) {
+                                    ForEach(EditorBackend.allCases, id: \.self) { backend in
+                                        Text(backend.displayName).tag(backend)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(width: 150)
+                                Spacer()
+                            }
+
+                            // Endpoint URL (shown for custom backend)
+                            if viewModel.editorBackend == .custom || viewModel.editorBackend == .auto {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Endpoint URL:")
+                                        .font(Typography.settingsLabel)
+                                    TextField("https://api.openai.com/v1", text: $viewModel.editorEndpointURL)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(Typography.settingsBody)
+                                }
+                            }
+
+                            // API Key
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("API Key:")
+                                    .font(Typography.settingsLabel)
+                                SecureField("sk-...", text: $viewModel.editorAPIKey)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(Typography.settingsBody)
+                            }
+
+                            // Model name
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Model:")
+                                    .font(Typography.settingsLabel)
+                                TextField("gpt-4o-mini", text: $viewModel.editorModelName)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(Typography.settingsBody)
+                            }
+
+                            // Test Connection button
+                            HStack {
+                                Button(action: {
+                                    testEditorConnection()
+                                }) {
+                                    HStack {
+                                        if viewModel.editorConnectionStatus == .checking {
+                                            ProgressView()
+                                                .scaleEffect(0.7)
+                                                .frame(width: 14, height: 14)
+                                        } else {
+                                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                        }
+                                        Text("Test Connection")
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(viewModel.editorConnectionStatus == .checking)
+
+                                Spacer()
+
+                                // Status indicator
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(viewModel.editorConnectionStatus.color)
+                                        .frame(width: 8, height: 8)
+                                    Text(viewModel.editorConnectionStatus.displayText)
+                                        .font(Typography.settingsCaption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.controlBackgroundColor).opacity(0.3))
+                    .cornerRadius(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Output Mode
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Output Style")
+                            .font(Typography.settingsHeader)
+                            .foregroundColor(.primary)
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Picker("Output Mode:", selection: $viewModel.editorOutputMode) {
+                                ForEach(OutputMode.allCases) { mode in
+                                    Text(mode.displayName).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.radioGroup)
+
+                            // Mode description
+                            Text(viewModel.editorOutputMode.description)
+                                .font(Typography.settingsCaption)
+                                .foregroundColor(.secondary)
+                                .padding(.leading, 20)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.controlBackgroundColor).opacity(0.3))
+                    .cornerRadius(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Advanced Settings
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Advanced")
+                            .font(Typography.settingsHeader)
+                            .foregroundColor(.primary)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Temperature:")
+                                    .font(Typography.settingsLabel)
+                                Spacer()
+                                Text(String(format: "%.1f", viewModel.editorTemperature))
+                                    .font(Typography.settingsBody)
+                                    .foregroundColor(.secondary)
+                            }
+                            Slider(value: $viewModel.editorTemperature, in: 0.0...1.0, step: 0.1)
+                                .help("Lower values produce more deterministic output")
+                        }
+                    }
+                    .padding()
+                    .background(Color(.controlBackgroundColor).opacity(0.3))
+                    .cornerRadius(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                // Local LLM Post-Processing (llama.cpp)
+                localLLMSettings
+            }
+            .padding()
+        }
+    }
+
+    @ViewBuilder
+    private var localLLMSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Local LLM (Experimental)")
+                    .font(Typography.settingsHeader)
+                    .foregroundColor(.primary)
+                Spacer()
+                Text("llama.cpp")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.15))
+                    .cornerRadius(4)
+            }
+
+            Text("Run LLM processing locally using llama.cpp. Requires downloading a model.")
+                .font(Typography.settingsCaption)
+                .foregroundColor(.secondary)
+
+            // Processing Mode
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Processing Mode:")
+                        .font(Typography.settingsLabel)
+                    Picker("", selection: $viewModel.llmProcessingMode) {
+                        ForEach(LLMProcessingMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 150)
+                    Spacer()
+                }
+
+                Text(viewModel.llmProcessingMode.description)
+                    .font(Typography.settingsCaption)
+                    .foregroundColor(.secondary)
+            }
+
+            // Custom prompt (shown when mode is custom)
+            if viewModel.llmProcessingMode == .custom {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Custom Prompt:")
+                        .font(Typography.settingsLabel)
+                    TextEditor(text: $viewModel.llmCustomPrompt)
+                        .font(Typography.settingsBody)
+                        .frame(height: 56)
+                        .padding(6)
+                        .background(Color(.textBackgroundColor))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                }
+            }
+
+            // Model Selection
+            if viewModel.llmProcessingMode != .none {
+                localLLMModelSection
+            }
+
+            // Timeout slider
+            if viewModel.llmProcessingMode != .none {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Timeout:")
+                            .font(Typography.settingsLabel)
+                        Spacer()
+                        Text("\(viewModel.llmTimeoutSeconds) seconds")
+                            .font(Typography.settingsBody)
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(value: Binding(
+                        get: { Double(viewModel.llmTimeoutSeconds) },
+                        set: { viewModel.llmTimeoutSeconds = Int($0) }
+                    ), in: 10...120, step: 10)
+                        .help("Maximum time to wait for LLM processing")
+                }
+
+                Toggle(isOn: $viewModel.llmAutoLoadModel) {
+                    Text("Auto-load model on startup")
+                        .font(Typography.settingsBody)
+                }
+                .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+            }
+        }
+        .padding()
+        .background(Color(.controlBackgroundColor).opacity(0.3))
+        .cornerRadius(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ObservedObject private var llmModelManager = LLMModelManager.shared
+
+    @ViewBuilder
+    private var localLLMModelSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Model")
+                .font(Typography.settingsLabel)
+
+            // List available/downloaded LLM models
+            ForEach(LLMModelManager.availableModels) { model in
+                LLMModelCardView(
+                    model: model,
+                    isSelected: viewModel.llmModelPath == llmModelManager.modelsDirectory.appendingPathComponent(model.name).path,
+                    isDownloaded: llmModelManager.isModelDownloaded(model),
+                    isDownloading: llmModelManager.currentDownload?.filename == model.name,
+                    downloadProgress: llmModelManager.currentDownload?.filename == model.name ? llmModelManager.downloadProgress : 0,
+                    onSelect: {
+                        viewModel.llmModelPath = llmModelManager.modelsDirectory.appendingPathComponent(model.name).path
+                    },
+                    onDownload: {
+                        downloadLLMModel(model)
+                    },
+                    onCancel: {
+                        llmModelManager.cancelDownload()
+                    }
+                )
+            }
+
+            // Models directory footer
+            HStack {
+                Text("Models stored in:")
+                    .font(Typography.settingsCaption)
+                    .foregroundColor(.secondary)
+                Text(llmModelManager.modelsDirectory.path)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button(action: {
+                    NSWorkspace.shared.open(llmModelManager.modelsDirectory)
+                }) {
+                    Label("Open", systemImage: "folder")
+                        .font(Typography.settingsCaption)
+                }
+                .buttonStyle(.borderless)
+                .help("Open LLM models directory")
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private func downloadLLMModel(_ model: LLMModelInfo) {
+        Task {
+            do {
+                try await llmModelManager.downloadModel(model) { progress in
+                    // Progress is tracked via LLMModelManager.currentDownload
+                }
+                // Auto-select the newly downloaded model
+                await MainActor.run {
+                    viewModel.llmModelPath = llmModelManager.modelsDirectory.appendingPathComponent(model.name).path
+                }
+            } catch {
+                await MainActor.run {
+                    downloadErrorMessage = error.localizedDescription
+                    showDownloadError = true
+                }
+            }
+        }
+    }
+
+    private func testEditorConnection() {
+        viewModel.editorConnectionStatus = .checking
+        // TODO: Implement actual connection test in PR2
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if viewModel.editorAPIKey.isEmpty {
+                viewModel.editorConnectionStatus = .error("API key required")
+            } else {
+                viewModel.editorConnectionStatus = .connected(model: viewModel.editorModelName)
+            }
+        }
+    }
+
     private var advancedSettings: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -1230,6 +1723,144 @@ struct DependencyRow: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+}
+
+// MARK: - LLM Model Card View
+
+struct LLMModelCardView: View {
+    let model: LLMModelInfo
+    let isSelected: Bool
+    let isDownloaded: Bool
+    let isDownloading: Bool
+    let downloadProgress: Double
+    let onSelect: () -> Void
+    let onDownload: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(model.displayName)
+                        .font(.headline)
+                        .foregroundColor(isDownloaded ? .primary : .secondary)
+
+                    if model.id == "qwen2-0.5b-instruct-q4_k_m" {
+                        Text("Recommended")
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green)
+                            .cornerRadius(4)
+                    }
+
+                    if isSelected && isDownloaded {
+                        Text("Selected")
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor)
+                            .cornerRadius(4)
+                    }
+                }
+
+                Text(model.description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 16) {
+                    Text(model.formattedSize)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Text(model.quantization)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15))
+                        .cornerRadius(4)
+
+                    Text(model.parameterCount)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Status/Action
+            if isDownloaded {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.accentColor)
+                        .imageScale(.large)
+                } else {
+                    Button("Select") {
+                        onSelect()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            } else if isDownloading {
+                HStack(spacing: 8) {
+                    ProgressView(value: downloadProgress)
+                        .frame(width: 60)
+                    Text("\(Int(downloadProgress * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(width: 35)
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cancel download")
+                }
+            } else {
+                Button(action: onDownload) {
+                    Label("Download", systemImage: "arrow.down.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(12)
+        .background(cardBackground)
+        .overlay(cardBorder)
+        .cornerRadius(10)
+        .contentShape(Rectangle())
+        .opacity(isDownloaded || isDownloading ? 1 : 0.7)
+    }
+
+    private var cardBackground: some View {
+        Group {
+            if isSelected && isDownloaded {
+                Color.accentColor.opacity(0.08)
+            } else if isDownloaded {
+                Color(.controlBackgroundColor).opacity(0.6)
+            } else {
+                Color(.controlBackgroundColor).opacity(0.4)
+            }
+        }
+    }
+
+    private var cardBorder: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .stroke(borderColor, lineWidth: isSelected && isDownloaded ? 2 : 1)
+    }
+
+    private var borderColor: Color {
+        if isSelected && isDownloaded {
+            return Color.accentColor.opacity(0.6)
+        } else if isDownloaded {
+            return Color.gray.opacity(0.3)
+        } else {
+            return Color.gray.opacity(0.2)
         }
     }
 }
