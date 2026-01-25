@@ -432,12 +432,23 @@ class TranscriptionService: ObservableObject {
                     detectedLanguage: effectiveLanguage
                 )
 
+                // Build glossary from user dictionary (DictionaryManager is @MainActor)
+                let glossary = await MainActor.run {
+                    DictionaryManager.shared.dictionary.topTerms(limit: 30).map { entry in
+                        DictionaryTerm(
+                            term: entry.term,
+                            aliases: entry.aliases,
+                            caseSensitive: entry.caseSensitive
+                        )
+                    }
+                }
+
                 // Run the async editor call (EditorCoordinator handles errors and fallback internally)
                 let textToEdit = processedText
                 processedText = await EditorCoordinator.shared.edit(
                     raw: textToEdit,
                     mode: prefs.editorOutputMode,
-                    glossary: [],  // TODO: Load from user dictionary when implemented
+                    glossary: glossary,
                     language: effectiveLanguage,
                     metadata: metadata
                 )

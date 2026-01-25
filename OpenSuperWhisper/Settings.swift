@@ -1174,6 +1174,198 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Dictionary Settings
+
+    private var dictionarySettings: some View {
+        VStack(spacing: 0) {
+            // Header with search and actions
+            HStack {
+                // Search field
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search terms...", text: $dictionarySearchText)
+                        .textFieldStyle(.plain)
+                    if !dictionarySearchText.isEmpty {
+                        Button(action: { dictionarySearchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(8)
+                .background(Color(.textBackgroundColor))
+                .cornerRadius(8)
+
+                Spacer()
+
+                // Action buttons
+                Button(action: { showAddTermSheet = true }) {
+                    Label("Add", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+
+                Menu {
+                    Button(action: importDictionary) {
+                        Label("Import...", systemImage: "square.and.arrow.down")
+                    }
+                    Button(action: exportDictionary) {
+                        Label("Export...", systemImage: "square.and.arrow.up")
+                    }
+                    Divider()
+                    Button(action: { showSuggestionsSheet = true }) {
+                        Label("Suggest from Clipboard", systemImage: "lightbulb")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding()
+
+            Divider()
+
+            // Terms list
+            if filteredDictionaryTerms.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "character.book.closed")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    if dictionarySearchText.isEmpty {
+                        Text("No dictionary terms")
+                            .font(Typography.settingsBody)
+                            .foregroundColor(.secondary)
+                        Text("Add terms to help Whisper recognize specific words and names.")
+                            .font(Typography.settingsCaption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Add First Term") {
+                            showAddTermSheet = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 8)
+                    } else {
+                        Text("No terms matching \"\(dictionarySearchText)\"")
+                            .font(Typography.settingsBody)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            } else {
+                List {
+                    ForEach(filteredDictionaryTerms) { entry in
+                        DictionaryTermRow(
+                            entry: entry,
+                            onEdit: { editingEntry = entry },
+                            onDelete: { deleteTerm(entry) }
+                        )
+                    }
+                }
+                .listStyle(.plain)
+            }
+
+            // Footer with term count
+            HStack {
+                Text("\(dictionaryManager.dictionary.terms.count) terms")
+                    .font(Typography.settingsCaption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                if dictionaryManager.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.controlBackgroundColor).opacity(0.3))
+        }
+        .sheet(isPresented: $showAddTermSheet) {
+            AddEditTermSheet(
+                entry: nil,
+                onSave: { entry in
+                    Task {
+                        try? await dictionaryManager.addTerm(entry)
+                    }
+                }
+            )
+        }
+        .sheet(item: $editingEntry) { entry in
+            AddEditTermSheet(
+                entry: entry,
+                onSave: { updatedEntry in
+                    Task {
+                        try? await dictionaryManager.updateTerm(updatedEntry)
+                    }
+                }
+            )
+        }
+        .sheet(isPresented: $showSuggestionsSheet) {
+            SuggestTermsSheet(
+                dictionaryManager: dictionaryManager,
+                onAddTerm: { term in
+                    let entry = DictionaryEntry(term: term)
+                    Task {
+                        try? await dictionaryManager.addTerm(entry)
+                    }
+                }
+            )
+        }
+        .alert("Import Error", isPresented: $showImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importErrorMessage)
+        }
+    }
+
+    private var filteredDictionaryTerms: [DictionaryEntry] {
+        dictionaryManager.dictionary.search(query: dictionarySearchText)
+    }
+
+    private func deleteTerm(_ entry: DictionaryEntry) {
+        Task {
+            try? await dictionaryManager.removeTerm(id: entry.id)
+        }
+    }
+
+    private func importDictionary() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Select a dictionary JSON file to import"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            Task {
+                do {
+                    try await dictionaryManager.importDictionary(from: url, replace: false)
+                } catch {
+                    await MainActor.run {
+                        importErrorMessage = error.localizedDescription
+                        showImportError = true
+                    }
+                }
+            }
+        }
+    }
+
+    private func exportDictionary() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "dictionary.json"
+        panel.message = "Export dictionary"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try dictionaryManager.exportDictionary(to: url)
+            } catch {
+                importErrorMessage = "Export failed: \(error.localizedDescription)"
+                showImportError = true
+            }
+        }
+    }
+
     private var advancedSettings: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
