@@ -13,7 +13,7 @@ struct EditorInput: Codable, Sendable {
         outputMode: OutputMode,
         glossary: [DictionaryTerm],
         language: String?,
-        constraints: EditorConstraints = .default
+        constraints: EditorConstraints = .clean
     ) {
         self.rawTranscription = rawTranscription
         self.outputMode = outputMode.rawValue
@@ -77,12 +77,80 @@ struct EditorOutput: Codable, Sendable {
         case changes
     }
 
-    /// Parse from JSON string
+    /// Parse from JSON string, handling common LLM response variations
     static func fromJSON(_ json: String) throws -> EditorOutput {
-        guard let data = json.data(using: .utf8) else {
+        // Strip markdown code blocks if present (```json ... ```)
+        let cleanedJSON = stripMarkdownCodeBlock(json)
+
+        guard let data = cleanedJSON.data(using: .utf8) else {
             throw EditorError.invalidResponse("Invalid JSON encoding")
         }
-        return try JSONDecoder().decode(EditorOutput.self, from: data)
+
+        // First try standard decoding
+        if let output = try? JSONDecoder().decode(EditorOutput.self, from: data) {
+            return output
+        }
+
+        // Try flexible parsing for alternative key names
+        if let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            // Look for the edited text under various possible keys
+            let possibleKeys = ["edited_text", "transcription", "text", "output", "result", "content"]
+            var editedText: String?
+            for key in possibleKeys {
+                if let value = jsonDict[key] as? String {
+                    editedText = value
+                    break
+                }
+            }
+
+            if let text = editedText {
+                // Extract changes if present
+                let changes = (jsonDict["changes"] as? [[String: Any]])?.compactMap { dict -> OutputChange? in
+                    guard let type = dict["type"] as? String else { return nil }
+                    return OutputChange(
+                        type: type,
+                        original: dict["original"] as? String,
+                        replacement: dict["replacement"] as? String,
+                        reason: dict["reason"] as? String
+                    )
+                }
+
+                return EditorOutput(editedText: text, changes: changes)
+            }
+        }
+
+        // No plain text fallback - require valid JSON structure
+        throw EditorError.invalidResponse("Response is not valid JSON with required structure")
+    }
+
+    /// Strip markdown code block wrappers (```json ... ``` or ``` ... ```)
+    private static func stripMarkdownCodeBlock(_ input: String) -> String {
+        var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Pattern: ```json or ``` at start, ``` at end
+        if text.hasPrefix("```") {
+            // Remove opening fence (```json or ```)
+            if let endOfFirstLine = text.firstIndex(of: "\n") {
+                text = String(text[text.index(after: endOfFirstLine)...])
+            } else {
+                // No newline, just remove ```
+                text = String(text.dropFirst(3))
+            }
+
+            // Remove closing fence
+            if text.hasSuffix("```") {
+                text = String(text.dropLast(3))
+            }
+
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return text
+    }
+
+    init(editedText: String, changes: [OutputChange]?) {
+        self.editedText = editedText
+        self.changes = changes
     }
 }
 

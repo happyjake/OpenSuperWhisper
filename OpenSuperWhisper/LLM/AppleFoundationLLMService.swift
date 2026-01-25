@@ -56,7 +56,8 @@ final class AppleFoundationLLMService: LLMServiceProtocol {
         }
 
         // Build the prompt based on mode
-        let prompt = buildPrompt(for: mode, text: text, customPrompt: customPrompt)
+        // TODO: Use this prompt when Apple Foundation Models API is available
+        _ = buildPrompt(for: mode, text: text, customPrompt: customPrompt)
 
         // TODO: When Apple Foundation Models API is available, implement actual inference
         // For now, return a placeholder that indicates the feature is not yet available

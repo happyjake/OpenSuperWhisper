@@ -2,7 +2,7 @@ import Foundation
 
 /// Constraints for DiffGuard safety checks
 struct EditorConstraints: Sendable {
-    /// Maximum allowed word change ratio (0.0-1.0)
+    /// Maximum allowed word change ratio (0.0+)
     let maxWordChangeRatio: Double
 
     /// Maximum allowed character insertion ratio (0.0-1.0)
@@ -18,8 +18,8 @@ struct EditorConstraints: Sendable {
     let preserveProperNouns: Bool
 
     init(
-        maxWordChangeRatio: Double = 0.08,
-        maxCharInsertionRatio: Double = 0.08,
+        maxWordChangeRatio: Double = 0.15,
+        maxCharInsertionRatio: Double = 0.15,
         enforceGlossary: Bool = true,
         preserveNumbers: Bool = true,
         preserveProperNouns: Bool = true
@@ -31,30 +31,54 @@ struct EditorConstraints: Sendable {
         self.preserveProperNouns = preserveProperNouns
     }
 
-    /// Default constraints (8% thresholds)
-    static let `default` = EditorConstraints()
-
-    /// Strict constraints (3% thresholds, for high-fidelity modes)
-    static let strict = EditorConstraints(
-        maxWordChangeRatio: 0.03,
-        maxCharInsertionRatio: 0.03
+    /// Verbatim mode: minimal changes (5% threshold)
+    static let verbatim = EditorConstraints(
+        maxWordChangeRatio: 0.05,
+        maxCharInsertionRatio: 0.05,
+        enforceGlossary: true,
+        preserveNumbers: true,
+        preserveProperNouns: true
     )
 
-    /// Relaxed constraints (15% thresholds, for transformative modes like notes/email)
-    static let relaxed = EditorConstraints(
-        maxWordChangeRatio: 0.15,
-        maxCharInsertionRatio: 0.15
+    /// Clean mode: moderate changes (40% word change to allow grammar fixes + dictionary substitutions)
+    static let clean = EditorConstraints(
+        maxWordChangeRatio: 0.40,
+        maxCharInsertionRatio: 0.20,
+        enforceGlossary: true,
+        preserveNumbers: true,
+        preserveProperNouns: true
+    )
+
+    /// Notes mode: transformative changes (35% char insertion)
+    /// Word changes are higher because we convert prose to bullets
+    static let notes = EditorConstraints(
+        maxWordChangeRatio: 0.50,
+        maxCharInsertionRatio: 0.35,
+        enforceGlossary: true,
+        preserveNumbers: true,
+        preserveProperNouns: false
+    )
+
+    /// Email/Slack mode: moderate-high changes
+    static let transformative = EditorConstraints(
+        maxWordChangeRatio: 0.40,
+        maxCharInsertionRatio: 0.30,
+        enforceGlossary: true,
+        preserveNumbers: true,
+        preserveProperNouns: false
     )
 
     /// Get appropriate constraints for an output mode
     static func forMode(_ mode: OutputMode) -> EditorConstraints {
         switch mode {
         case .verbatim:
-            return .strict
+            return .verbatim
         case .clean:
-            return .default
-        case .notes, .email, .slack:
-            return .relaxed
+            return .clean
+        case .notes:
+            return .notes
+        case .email, .slack:
+            return .transformative
         }
     }
 }
@@ -63,7 +87,7 @@ struct EditorConstraints: Sendable {
 struct DiffGuard: Sendable {
     let constraints: EditorConstraints
 
-    init(constraints: EditorConstraints = .default) {
+    init(constraints: EditorConstraints = .clean) {
         self.constraints = constraints
     }
 
@@ -79,12 +103,14 @@ struct DiffGuard: Sendable {
         let charInsertionRatio = calculateCharInsertionRatio(original: original, edited: edited)
 
         // Check glossary enforcement
-        let glossaryEnforced = checkGlossaryEnforcement(original: original, edited: edited, glossary: glossary)
+        let glossaryEnforced = checkGlossaryEnforcement(
+            original: original, edited: edited, glossary: glossary)
 
         // Determine if safety checks passed
-        let passed = wordChangeRatio <= constraints.maxWordChangeRatio &&
-                     charInsertionRatio <= constraints.maxCharInsertionRatio &&
-                     (!constraints.enforceGlossary || glossaryEnforced)
+        let passed =
+            wordChangeRatio <= constraints.maxWordChangeRatio
+            && charInsertionRatio <= constraints.maxCharInsertionRatio
+            && (!constraints.enforceGlossary || glossaryEnforced)
 
         return SafetySummary(
             wordChangeRatio: wordChangeRatio,
@@ -124,7 +150,9 @@ struct DiffGuard: Sendable {
         return Double(inserted) / Double(originalCount)
     }
 
-    private func checkGlossaryEnforcement(original: String, edited: String, glossary: [DictionaryTerm]) -> Bool {
+    private func checkGlossaryEnforcement(
+        original: String, edited: String, glossary: [DictionaryTerm]
+    ) -> Bool {
         guard !glossary.isEmpty else { return true }
 
         let originalLower = original.lowercased()

@@ -53,11 +53,11 @@ enum OutputMode: String, Codable, Sendable, CaseIterable, Identifiable {
         case .clean:
             return "Clean up the text: fix grammar, remove filler words (um, uh, like), and improve punctuation. Preserve the speaker's meaning and tone."
         case .notes:
-            return "Convert the text into concise bullet-point notes. Extract key points only."
+            return "Convert the text into concise bullet-point notes. Extract key points only. Output ONLY the bullet points, no preamble or introduction."
         case .email:
-            return "Format as a professional email. Add appropriate greeting and sign-off if context suggests."
+            return "Format as a professional email. Add appropriate greeting and sign-off if context suggests. Output ONLY the email content."
         case .slack:
-            return "Format for a casual Slack message. Keep it conversational and concise."
+            return "Format for a casual Slack message. Keep it conversational and concise. Output ONLY the message content."
         }
     }
 }

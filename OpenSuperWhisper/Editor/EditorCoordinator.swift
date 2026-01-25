@@ -62,8 +62,12 @@ final class EditorCoordinator {
 
             // Check if safety triggered fallback
             if result.report.safety.fallbackTriggered {
-                log("Safety fallback triggered, returning raw text")
-                return raw
+                log("Fallback triggered, using deterministic post-processing")
+                // The OpenAIEditor now returns processed text, not raw
+                // Only return raw if the processed result is the same
+                if result.edited == raw {
+                    return raw
+                }
             }
 
             return result.edited
