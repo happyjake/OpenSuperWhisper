@@ -1151,12 +1151,31 @@ struct MicrophonePickerIconView: View {
 
 struct MainRecordButton: View {
     let isRecording: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var idleBackgroundColor: Color {
+        colorScheme == .dark
+            ? Color.red.opacity(0.25)
+            : Color.red.opacity(0.12)
+    }
+
+    private var idleRingColor: Color {
+        colorScheme == .dark
+            ? Color.red.opacity(0.5)
+            : Color.red.opacity(0.3)
+    }
+
+    private var idleShadowColor: Color {
+        colorScheme == .dark
+            ? Color.red.opacity(0.3)
+            : Color.black.opacity(0.1)
+    }
 
     var body: some View {
         ZStack {
             // Background circle
             Circle()
-                .fill(isRecording ? Color.red : Color.red.opacity(0.12))
+                .fill(isRecording ? Color.red : idleBackgroundColor)
                 .frame(width: 64, height: 64)
 
             // Pulsing ring when recording
@@ -1173,7 +1192,7 @@ struct MainRecordButton: View {
             } else {
                 // Outer ring for idle state
                 Circle()
-                    .stroke(Color.red.opacity(0.3), lineWidth: 2)
+                    .stroke(idleRingColor, lineWidth: 2)
                     .frame(width: 64, height: 64)
             }
 
@@ -1193,7 +1212,7 @@ struct MainRecordButton: View {
                 }
             }
         }
-        .shadow(color: isRecording ? .red.opacity(0.5) : .black.opacity(0.1), radius: isRecording ? 12 : 4)
+        .shadow(color: isRecording ? .red.opacity(0.5) : idleShadowColor, radius: isRecording ? 12 : 4)
         .scaleEffect(isRecording ? 1.08 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isRecording)
     }

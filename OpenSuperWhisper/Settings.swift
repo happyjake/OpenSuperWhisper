@@ -72,7 +72,7 @@ class SettingsViewModel: ObservableObject {
             AppPreferences.shared.showTimestamps = showTimestamps
         }
     }
-    
+
     @Published var temperature: Double {
         didSet {
             AppPreferences.shared.temperature = temperature
@@ -142,13 +142,13 @@ class SettingsViewModel: ObservableObject {
             AppPreferences.shared.debugMode = debugMode
         }
     }
-    
+
     @Published var playSoundOnRecordStart: Bool {
         didSet {
             AppPreferences.shared.playSoundOnRecordStart = playSoundOnRecordStart
         }
     }
-    
+
     @Published var useAsianAutocorrect: Bool {
         didSet {
             AppPreferences.shared.useAsianAutocorrect = useAsianAutocorrect
@@ -183,7 +183,8 @@ class SettingsViewModel: ObservableObject {
 
     @Published var editorEndpointURL: String {
         didSet {
-            AppPreferences.shared.editorEndpointURL = editorEndpointURL.isEmpty ? nil : editorEndpointURL
+            AppPreferences.shared.editorEndpointURL =
+                editorEndpointURL.isEmpty ? nil : editorEndpointURL
         }
     }
 
@@ -289,7 +290,8 @@ class SettingsViewModel: ObservableObject {
         var loadedPrompts = prefs.languagePrompts
         if loadedPrompts.isEmpty && !prefs.initialPrompt.isEmpty {
             // Migrate old single initialPrompt to the current language
-            loadedPrompts[prefs.whisperLanguage == "auto" ? "en" : prefs.whisperLanguage] = prefs.initialPrompt
+            loadedPrompts[prefs.whisperLanguage == "auto" ? "en" : prefs.whisperLanguage] =
+                prefs.initialPrompt
         }
         self.languagePrompts = loadedPrompts
 
@@ -328,7 +330,8 @@ class SettingsViewModel: ObservableObject {
 
         // Construct Hugging Face URL from model filename
         let baseName = modelName.replacingOccurrences(of: ".bin", with: "")
-        let huggingFaceURLString = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(baseName)-encoder.mlmodelc.zip?download=true"
+        let huggingFaceURLString =
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(baseName)-encoder.mlmodelc.zip?download=true"
         guard let coreMLURL = URL(string: huggingFaceURLString) else { return }
 
         WhisperModelManager.shared.downloadCoreMLInBackground(from: coreMLURL, for: modelName)
@@ -358,7 +361,8 @@ class SettingsViewModel: ObservableObject {
     }
 
     private func startAccessibilityChecking() {
-        accessibilityCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        accessibilityCheckTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
+            [weak self] _ in
             self?.checkAccessibilityPermission()
         }
     }
@@ -371,7 +375,9 @@ class SettingsViewModel: ObservableObject {
     }
 
     func openAccessibilityPreferences() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+        if let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        {
             NSWorkspace.shared.open(url)
         }
     }
@@ -530,13 +536,15 @@ struct SettingsView: View {
     @ViewBuilder
     private func tabButton(title: String, icon: String, tag: Int) -> some View {
         Button(action: { selectedTab = tag }) {
-            HStack(spacing: 4) {
+            VStack(spacing: 2) {
                 Image(systemName: icon)
-                    .font(.system(size: 11))
+                    .font(.system(size: 14))
                 Text(title)
-                    .font(.system(size: 12))
+                    .font(.system(size: 10))
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 10)
+            .frame(minWidth: 58)
+            .padding(.horizontal, 6)
             .padding(.vertical, 6)
             .background(selectedTab == tag ? Color.accentColor : Color.clear)
             .foregroundColor(selectedTab == tag ? .white : .primary)
@@ -544,14 +552,15 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
     }
-    
+
     private var modelSettings: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 // Unified Model List
                 VStack(spacing: 8) {
                     ForEach(availableModels) { model in
-                        let isActive = viewModel.selectedModelURL?.lastPathComponent == model.filename
+                        let isActive =
+                            viewModel.selectedModelURL?.lastPathComponent == model.filename
                         let coreMLState = isActive ? getCoreMLState(for: model) : nil
 
                         ModelCardView(
@@ -633,7 +642,8 @@ struct SettingsView: View {
 
         // Check if resumable
         if WhisperModelManager.shared.hasCoreMLResumableDownload(for: modelName) {
-            let progress = WhisperModelManager.shared.getCoreMLResumableDownload(for: modelName)?.progress ?? 0
+            let progress =
+                WhisperModelManager.shared.getCoreMLResumableDownload(for: modelName)?.progress ?? 0
             return .resumable(progress: progress)
         }
 
@@ -641,10 +651,11 @@ struct SettingsView: View {
     }
 
     private func selectModel(_ model: DownloadableModel) {
-        let modelPath = WhisperModelManager.shared.modelsDirectory.appendingPathComponent(model.filename)
+        let modelPath = WhisperModelManager.shared.modelsDirectory.appendingPathComponent(
+            model.filename)
         viewModel.selectedModelURL = modelPath
     }
-    
+
     private var transcriptionSettings: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -723,10 +734,15 @@ struct SettingsView: View {
                         // Language picker inline (auto-detect mode only)
                         if viewModel.selectedLanguage == "auto" {
                             Picker("", selection: $viewModel.editingPromptLanguage) {
-                                ForEach(LanguageUtil.availableLanguages.filter { $0 != "auto" }, id: \.self) { code in
+                                ForEach(
+                                    LanguageUtil.availableLanguages.filter { $0 != "auto" },
+                                    id: \.self
+                                ) { code in
                                     HStack {
                                         Text(LanguageUtil.languageNames[code] ?? code)
-                                        if LanguageUtil.isCustomPrompt(for: code, userPrompts: viewModel.languagePrompts) {
+                                        if LanguageUtil.isCustomPrompt(
+                                            for: code, userPrompts: viewModel.languagePrompts)
+                                        {
                                             Text("*")
                                         }
                                     }
@@ -742,7 +758,8 @@ struct SettingsView: View {
                         // Reset button (shown when prompt is customized)
                         if viewModel.isCurrentPromptCustomized {
                             Button(action: {
-                                let lang = viewModel.selectedLanguage == "auto"
+                                let lang =
+                                    viewModel.selectedLanguage == "auto"
                                     ? viewModel.editingPromptLanguage
                                     : viewModel.selectedLanguage
                                 viewModel.resetPromptToDefault(for: lang)
@@ -756,10 +773,12 @@ struct SettingsView: View {
                     }
 
                     // Prompt editor
-                    TextEditor(text: Binding(
-                        get: { viewModel.currentEditingPrompt },
-                        set: { viewModel.currentEditingPrompt = $0 }
-                    ))
+                    TextEditor(
+                        text: Binding(
+                            get: { viewModel.currentEditingPrompt },
+                            set: { viewModel.currentEditingPrompt = $0 }
+                        )
+                    )
                     .font(Typography.settingsBody)
                     .frame(height: 56)
                     .padding(6)
@@ -777,9 +796,12 @@ struct SettingsView: View {
 
                     // Concise helper text
                     HStack(spacing: 4) {
-                        let langName = viewModel.selectedLanguage == "auto"
-                            ? (LanguageUtil.languageNames[viewModel.editingPromptLanguage] ?? viewModel.editingPromptLanguage)
-                            : (LanguageUtil.languageNames[viewModel.selectedLanguage] ?? viewModel.selectedLanguage)
+                        let langName =
+                            viewModel.selectedLanguage == "auto"
+                            ? (LanguageUtil.languageNames[viewModel.editingPromptLanguage]
+                                ?? viewModel.editingPromptLanguage)
+                            : (LanguageUtil.languageNames[viewModel.selectedLanguage]
+                                ?? viewModel.selectedLanguage)
                         Text("Prompt used when \(langName) is detected.")
                             .font(Typography.settingsCaption)
                             .foregroundColor(.secondary)
@@ -839,9 +861,11 @@ struct SettingsView: View {
                             .labelsHidden()
                     }
 
-                    Text("Use an LLM to clean up transcriptions: fix grammar, remove filler words, and improve formatting.")
-                        .font(Typography.settingsCaption)
-                        .foregroundColor(.secondary)
+                    Text(
+                        "Use an LLM to clean up transcriptions: fix grammar, remove filler words, and improve formatting."
+                    )
+                    .font(Typography.settingsCaption)
+                    .foregroundColor(.secondary)
                 }
                 .padding()
                 .background(Color(.controlBackgroundColor).opacity(0.3))
@@ -871,13 +895,18 @@ struct SettingsView: View {
                             }
 
                             // Endpoint URL (shown for custom backend)
-                            if viewModel.editorBackend == .custom || viewModel.editorBackend == .auto {
+                            if viewModel.editorBackend == .custom
+                                || viewModel.editorBackend == .auto
+                            {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Endpoint URL:")
                                         .font(Typography.settingsLabel)
-                                    TextField("https://api.openai.com/v1", text: $viewModel.editorEndpointURL)
-                                        .textFieldStyle(.roundedBorder)
-                                        .font(Typography.settingsBody)
+                                    TextField(
+                                        "https://api.openai.com/v1",
+                                        text: $viewModel.editorEndpointURL
+                                    )
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(Typography.settingsBody)
                                 }
                             }
 
@@ -1071,11 +1100,13 @@ struct SettingsView: View {
                             .font(Typography.settingsBody)
                             .foregroundColor(.secondary)
                     }
-                    Slider(value: Binding(
-                        get: { Double(viewModel.llmTimeoutSeconds) },
-                        set: { viewModel.llmTimeoutSeconds = Int($0) }
-                    ), in: 10...120, step: 10)
-                        .help("Maximum time to wait for LLM processing")
+                    Slider(
+                        value: Binding(
+                            get: { Double(viewModel.llmTimeoutSeconds) },
+                            set: { viewModel.llmTimeoutSeconds = Int($0) }
+                        ), in: 10...120, step: 10
+                    )
+                    .help("Maximum time to wait for LLM processing")
                 }
 
                 Toggle(isOn: $viewModel.llmAutoLoadModel) {
@@ -1103,12 +1134,15 @@ struct SettingsView: View {
             ForEach(LLMModelManager.availableModels) { model in
                 LLMModelCardView(
                     model: model,
-                    isSelected: viewModel.llmModelPath == llmModelManager.modelsDirectory.appendingPathComponent(model.name).path,
+                    isSelected: viewModel.llmModelPath
+                        == llmModelManager.modelsDirectory.appendingPathComponent(model.name).path,
                     isDownloaded: llmModelManager.isModelDownloaded(model),
                     isDownloading: llmModelManager.currentDownload?.filename == model.name,
-                    downloadProgress: llmModelManager.currentDownload?.filename == model.name ? llmModelManager.downloadProgress : 0,
+                    downloadProgress: llmModelManager.currentDownload?.filename == model.name
+                        ? llmModelManager.downloadProgress : 0,
                     onSelect: {
-                        viewModel.llmModelPath = llmModelManager.modelsDirectory.appendingPathComponent(model.name).path
+                        viewModel.llmModelPath =
+                            llmModelManager.modelsDirectory.appendingPathComponent(model.name).path
                     },
                     onDownload: {
                         downloadLLMModel(model)
@@ -1151,7 +1185,8 @@ struct SettingsView: View {
                 }
                 // Auto-select the newly downloaded model
                 await MainActor.run {
-                    viewModel.llmModelPath = llmModelManager.modelsDirectory.appendingPathComponent(model.name).path
+                    viewModel.llmModelPath =
+                        llmModelManager.modelsDirectory.appendingPathComponent(model.name).path
                 }
             } catch {
                 await MainActor.run {
@@ -1388,9 +1423,11 @@ struct SettingsView: View {
                                 Text("Beam Size:")
                                     .font(Typography.settingsBody)
                                 Spacer()
-                                Stepper("\(viewModel.beamSize)", value: $viewModel.beamSize, in: 1...10)
-                                    .help("Number of beams to use in beam search")
-                                    .frame(width: 120)
+                                Stepper(
+                                    "\(viewModel.beamSize)", value: $viewModel.beamSize, in: 1...10
+                                )
+                                .help("Number of beams to use in beam search")
+                                .frame(width: 120)
                             }
                             .padding(.leading, 24)
                         }
@@ -1463,7 +1500,7 @@ struct SettingsView: View {
             .padding()
         }
     }
-    
+
     private var shortcutSettings: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -1593,14 +1630,18 @@ struct SettingsView: View {
                             // Feature 2: Auto-paste toggle
                             HStack(alignment: .top, spacing: 10) {
                                 Image(systemName: "doc.on.clipboard")
-                                    .foregroundColor(viewModel.autoCopyToClipboard ? .accentColor : .secondary)
+                                    .foregroundColor(
+                                        viewModel.autoCopyToClipboard ? .accentColor : .secondary
+                                    )
                                     .frame(width: 20)
                                 VStack(alignment: .leading, spacing: 6) {
                                     Toggle(isOn: $viewModel.autoPasteAfterCopy) {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Auto-paste after transcription")
                                                 .font(Typography.settingsBody)
-                                                .foregroundColor(viewModel.autoCopyToClipboard ? .primary : .secondary)
+                                                .foregroundColor(
+                                                    viewModel.autoCopyToClipboard
+                                                        ? .primary : .secondary)
                                             Text("Automatically paste into the active text field")
                                                 .font(Typography.settingsCaption)
                                                 .foregroundColor(.secondary)
@@ -1610,9 +1651,11 @@ struct SettingsView: View {
                                     .disabled(!viewModel.autoCopyToClipboard)
 
                                     if !viewModel.autoCopyToClipboard {
-                                        Text("Requires \"Copy transcription to clipboard\" to be enabled")
-                                            .font(Typography.settingsCaption)
-                                            .foregroundColor(.orange)
+                                        Text(
+                                            "Requires \"Copy transcription to clipboard\" to be enabled"
+                                        )
+                                        .font(Typography.settingsCaption)
+                                        .foregroundColor(.orange)
                                     }
                                 }
                             }
@@ -1727,8 +1770,10 @@ struct SettingsView: View {
                         .font(.title2)
                         .fontWeight(.semibold)
 
-                    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-                       let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"]
+                        as? String,
+                        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+                    {
                         Text("Version \(version) (\(build))")
                             .font(Typography.settingsBody)
                             .foregroundColor(.secondary)
@@ -1748,11 +1793,21 @@ struct SettingsView: View {
                         .foregroundColor(.primary)
 
                     VStack(alignment: .leading, spacing: 10) {
-                        DependencyRow(name: "whisper.cpp", version: BuildInfo.whisperCppVersion, url: BuildInfo.whisperCppURL)
-                        DependencyRow(name: "GRDB.swift", version: BuildInfo.grdbVersion, url: URL(string: "https://github.com/groue/GRDB.swift"))
-                        DependencyRow(name: "KeyboardShortcuts", version: BuildInfo.keyboardShortcutsVersion, url: URL(string: "https://github.com/sindresorhus/KeyboardShortcuts"))
-                        DependencyRow(name: "autocorrect", version: BuildInfo.autocorrectVersion, url: URL(string: "https://github.com/huacnlee/autocorrect"))
-                        DependencyRow(name: "OpenMP", version: BuildInfo.libompVersion, url: URL(string: "https://www.openmp.org"))
+                        DependencyRow(
+                            name: "whisper.cpp", version: BuildInfo.whisperCppVersion,
+                            url: BuildInfo.whisperCppURL)
+                        DependencyRow(
+                            name: "GRDB.swift", version: BuildInfo.grdbVersion,
+                            url: URL(string: "https://github.com/groue/GRDB.swift"))
+                        DependencyRow(
+                            name: "KeyboardShortcuts", version: BuildInfo.keyboardShortcutsVersion,
+                            url: URL(string: "https://github.com/sindresorhus/KeyboardShortcuts"))
+                        DependencyRow(
+                            name: "autocorrect", version: BuildInfo.autocorrectVersion,
+                            url: URL(string: "https://github.com/huacnlee/autocorrect"))
+                        DependencyRow(
+                            name: "OpenMP", version: BuildInfo.libompVersion,
+                            url: URL(string: "https://www.openmp.org"))
                     }
                 }
                 .padding()
@@ -1871,21 +1926,25 @@ struct SettingsView: View {
         Task {
             do {
                 let filename = model.filename
-                try await WhisperModelManager.shared.downloadModel(url: model.url, name: filename) { progress in
+                try await WhisperModelManager.shared.downloadModel(url: model.url, name: filename) {
+                    progress in
                     // Progress is tracked via WhisperModelManager.currentDownload
                 }
                 // Refresh the model picker after download completes
                 await MainActor.run {
                     viewModel.loadAvailableModels()
                     // Select the newly downloaded model
-                    if let newModel = viewModel.availableModels.first(where: { $0.lastPathComponent == filename }) {
+                    if let newModel = viewModel.availableModels.first(where: {
+                        $0.lastPathComponent == filename
+                    }) {
                         viewModel.selectedModelURL = newModel
                     }
                 }
 
                 // Auto-select and reload if there's no working model
                 if TranscriptionService.shared.modelLoadError != nil {
-                    let modelPath = WhisperModelManager.shared.modelsDirectory.appendingPathComponent(filename).path
+                    let modelPath = WhisperModelManager.shared.modelsDirectory
+                        .appendingPathComponent(filename).path
                     AppPreferences.shared.selectedModelPath = modelPath
                     TranscriptionService.shared.reloadModel(with: modelPath)
                 }
@@ -1893,7 +1952,8 @@ struct SettingsView: View {
                 // Trigger CoreML download in background if available
                 if model.hasCoreML, let coreMLURL = model.url.coreMLEncoderURL {
                     print("Starting CoreML encoder download in background...")
-                    WhisperModelManager.shared.downloadCoreMLInBackground(from: coreMLURL, for: filename)
+                    WhisperModelManager.shared.downloadCoreMLInBackground(
+                        from: coreMLURL, for: filename)
                 }
             } catch {
                 await MainActor.run {
@@ -2294,7 +2354,8 @@ struct AddEditTermSheet: View {
     }
 
     private func saveEntry() {
-        let aliases = aliasesText
+        let aliases =
+            aliasesText
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
@@ -2349,11 +2410,13 @@ struct SuggestTermsSheet: View {
                     Text("No suggestions found")
                         .font(Typography.settingsBody)
                         .foregroundColor(.secondary)
-                    Text("Copy some transcription text to your clipboard, then open this sheet again.")
-                        .font(Typography.settingsCaption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                    Text(
+                        "Copy some transcription text to your clipboard, then open this sheet again."
+                    )
+                    .font(Typography.settingsCaption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -2402,4 +2465,3 @@ struct SuggestTermsSheet: View {
         }
     }
 }
-
