@@ -448,6 +448,16 @@ struct SettingsView: View {
     @State private var showDownloadError = false
     @State private var downloadErrorMessage = ""
 
+    // Dictionary state
+    @StateObject private var dictionaryManager = DictionaryManager.shared
+    @State private var dictionarySearchText = ""
+    @State private var showAddTermSheet = false
+    @State private var editingEntry: DictionaryEntry?
+    @State private var showImportError = false
+    @State private var importErrorMessage = ""
+    @State private var showSuggestionsSheet = false
+    @State private var lastTranscriptText = ""
+
     init(initialTab: Int = 0) {
         _selectedTab = State(initialValue: initialTab)
     }
@@ -460,8 +470,9 @@ struct SettingsView: View {
                 tabButton(title: "Model", icon: "cpu", tag: 1)
                 tabButton(title: "Transcription", icon: "text.bubble", tag: 2)
                 tabButton(title: "Editor", icon: "wand.and.stars", tag: 3)
-                tabButton(title: "Advanced", icon: "gear", tag: 4)
-                tabButton(title: "About", icon: "info.circle", tag: 5)
+                tabButton(title: "Dictionary", icon: "character.book.closed", tag: 4)
+                tabButton(title: "Advanced", icon: "gear", tag: 5)
+                tabButton(title: "About", icon: "info.circle", tag: 6)
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -476,8 +487,9 @@ struct SettingsView: View {
                 case 1: modelSettings
                 case 2: transcriptionSettings
                 case 3: editorSettings
-                case 4: advancedSettings
-                case 5: aboutSettings
+                case 4: dictionarySettings
+                case 5: advancedSettings
+                case 6: aboutSettings
                 default: shortcutSettings
                 }
             }

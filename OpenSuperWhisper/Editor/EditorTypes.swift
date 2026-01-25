@@ -3,10 +3,12 @@ import Foundation
 /// Dictionary term for glossary enforcement
 struct DictionaryTerm: Codable, Sendable, Hashable {
     let term: String
+    let aliases: [String]
     let caseSensitive: Bool
 
-    init(term: String, caseSensitive: Bool = false) {
+    init(term: String, aliases: [String] = [], caseSensitive: Bool = false) {
         self.term = term
+        self.aliases = aliases
         self.caseSensitive = caseSensitive
     }
 }
