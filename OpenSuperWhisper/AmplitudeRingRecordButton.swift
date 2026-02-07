@@ -20,7 +20,7 @@ struct AmplitudeRingConfig {
     static let maxThickness: CGFloat = 6.0
     static let thicknessCurve: CGFloat = 0.6  // ease-out exponent for non-linear thickness
 
-    // Colors
+    // Colors (light mode defaults — use Colors(colorScheme:) for adaptive values)
     static let idleColor = Color.red.opacity(0.3)
     static let armedColor = Color.red.opacity(0.5)
     static let recordingColor = Color.red
@@ -34,7 +34,6 @@ struct AmplitudeRingConfig {
     static let armedPulseDuration: TimeInterval = 0.8
 
     // Outer halo (constant slow pulse when recording)
-    static let haloOpacity: CGFloat = 0.3
     static let haloPulseDuration: TimeInterval = 2.5
     static let haloOffset: CGFloat = 8
 
@@ -42,12 +41,33 @@ struct AmplitudeRingConfig {
     static let minRingOpacity: CGFloat = 0.5
     static let maxRingOpacity: CGFloat = 1.0
 
-    // Inner glow (amplitude-based)
-    static let glowRadius: CGFloat = 6
-    static let maxGlowOpacity: CGFloat = 0.25
-
     // Too quiet breathing pulse
     static let quietPulseDuration: TimeInterval = 1.5
+
+    /// Dark-mode-aware color and glow values
+    struct Colors {
+        let idleColor: Color
+        let armedColor: Color
+        let glowRadius: CGFloat
+        let maxGlowOpacity: CGFloat
+        let haloOpacity: CGFloat
+
+        init(colorScheme: ColorScheme) {
+            if colorScheme == .dark {
+                idleColor = Color.red.opacity(0.4)
+                armedColor = Color.red.opacity(0.7)
+                glowRadius = 10
+                maxGlowOpacity = 0.4
+                haloOpacity = 0.45
+            } else {
+                idleColor = Color.red.opacity(0.3)
+                armedColor = Color.red.opacity(0.5)
+                glowRadius = 6
+                maxGlowOpacity = 0.25
+                haloOpacity = 0.3
+            }
+        }
+    }
 }
 
 // MARK: - AmplitudeRingRecordButton
@@ -157,7 +177,12 @@ struct AmplitudeRingCanvas: View {
     @State private var haloPulse: CGFloat = 0
     @State private var quietPulse: CGFloat = 0
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private let config = AmplitudeRingConfig.self
+    private var colors: AmplitudeRingConfig.Colors {
+        AmplitudeRingConfig.Colors(colorScheme: colorScheme)
+    }
 
     // Frame needs to be large enough for ring + expansion + halo
     private let frameSize: CGFloat = 120
@@ -170,7 +195,7 @@ struct AmplitudeRingCanvas: View {
                     .stroke(config.recordingColor, lineWidth: 4)
                     .frame(width: haloDiameter, height: haloDiameter)
                     .blur(radius: 8)
-                    .opacity(config.haloOpacity * (0.5 + 0.5 * haloPulse))
+                    .opacity(colors.haloOpacity * (0.5 + 0.5 * haloPulse))
             }
 
             // Layer 2: Inner glow (amplitude-based)
@@ -178,7 +203,7 @@ struct AmplitudeRingCanvas: View {
                 Circle()
                     .stroke(config.glowColor, lineWidth: currentThickness)
                     .frame(width: currentDiameter, height: currentDiameter)
-                    .blur(radius: config.glowRadius)
+                    .blur(radius: colors.glowRadius)
                     .opacity(glowOpacity)
             }
 
@@ -278,7 +303,7 @@ struct AmplitudeRingCanvas: View {
         if isArmed {
             return 0.15 + 0.1 * armedPulse
         } else if isRecording && !isProcessing {
-            return Double(config.maxGlowOpacity * displayAmplitude)
+            return Double(colors.maxGlowOpacity * displayAmplitude)
         }
         return 0
     }
@@ -293,7 +318,7 @@ struct AmplitudeRingCanvas: View {
         } else if isRecording || isProcessing {
             return config.recordingColor
         } else {
-            return config.idleColor
+            return colors.idleColor
         }
     }
 
@@ -391,7 +416,12 @@ struct SimplifiedAmplitudeRing: View {
     let isRecording: Bool
     let isProcessing: Bool
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private let config = AmplitudeRingConfig.self
+    private var colors: AmplitudeRingConfig.Colors {
+        AmplitudeRingConfig.Colors(colorScheme: colorScheme)
+    }
 
     var body: some View {
         ZStack {
@@ -418,11 +448,11 @@ struct SimplifiedAmplitudeRing: View {
 
     private var ringColor: Color {
         if isArmed {
-            return config.armedColor
+            return colors.armedColor
         } else if isRecording || isProcessing {
             return config.recordingColor.opacity(0.5)
         } else {
-            return config.idleColor
+            return colors.idleColor
         }
     }
 }

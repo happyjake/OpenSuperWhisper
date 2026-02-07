@@ -402,32 +402,7 @@ struct ContentView: View {
                 .contentShape(Circle().size(width: 84, height: 84).offset(x: 18, y: 18))
                 .disabled(viewModel.transcriptionService.isLoading || viewModel.state == .decoding || viewModel.state == .copied)
                 .background {
-                    ZStack {
-                        // Soft outer glow - very blurred
-                        Circle()
-                            .fill(Color.white.opacity(0.6))
-                            .frame(width: 95, height: 95)
-                            .blur(radius: 15)
-
-                        // Glass body - soft gradient
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        Color.white.opacity(0.95),
-                                        Color.white.opacity(0.85),
-                                        Color(white: 0.92).opacity(0.9)
-                                    ],
-                                    center: .topLeading,
-                                    startRadius: 0,
-                                    endRadius: 80
-                                )
-                            )
-                            .frame(width: 84, height: 84)
-                            .blur(radius: 0.5)
-                    }
-                    .shadow(color: .black.opacity(0.12), radius: 20, y: 10)
-                    .allowsHitTesting(false)
+                    GlassButtonBackground()
                 }
                 .padding(.bottom, 52)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isRecording)
@@ -1155,20 +1130,36 @@ struct MainRecordButton: View {
 
     private var idleBackgroundColor: Color {
         colorScheme == .dark
-            ? Color.red.opacity(0.25)
+            ? Color(red: 0.45, green: 0.05, blue: 0.05).opacity(0.7)
             : Color.red.opacity(0.12)
     }
 
     private var idleRingColor: Color {
         colorScheme == .dark
-            ? Color.red.opacity(0.5)
+            ? Color.red.opacity(0.6)
             : Color.red.opacity(0.3)
     }
 
     private var idleShadowColor: Color {
         colorScheme == .dark
-            ? Color.red.opacity(0.3)
+            ? Color.red.opacity(0.15)
             : Color.black.opacity(0.1)
+    }
+
+    private var idleMicColor: Color {
+        colorScheme == .dark
+            ? Color(red: 1.0, green: 0.25, blue: 0.25)
+            : .red
+    }
+
+    private var recordingShadowColor: Color {
+        colorScheme == .dark
+            ? Color.red.opacity(0.6)
+            : Color.red.opacity(0.5)
+    }
+
+    private var recordingShadowRadius: CGFloat {
+        colorScheme == .dark ? 16 : 12
     }
 
     var body: some View {
@@ -1200,7 +1191,7 @@ struct MainRecordButton: View {
             ZStack {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 26, weight: .medium))
-                    .foregroundColor(isRecording ? .white : .red)
+                    .foregroundColor(isRecording ? .white : idleMicColor)
 
                 // Small recording dot indicator
                 if isRecording {
@@ -1212,25 +1203,106 @@ struct MainRecordButton: View {
                 }
             }
         }
-        .shadow(color: isRecording ? .red.opacity(0.5) : idleShadowColor, radius: isRecording ? 12 : 4)
+        .shadow(color: isRecording ? recordingShadowColor : idleShadowColor, radius: isRecording ? recordingShadowRadius : 4)
         .scaleEffect(isRecording ? 1.08 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isRecording)
     }
 }
 
+struct GlassButtonBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            // Soft outer glow - very blurred
+            Circle()
+                .fill(Color(white: colorScheme == .dark ? 0.25 : 1.0)
+                    .opacity(colorScheme == .dark ? 0.4 : 0.6))
+                .frame(width: 95, height: 95)
+                .blur(radius: 15)
+
+            // Glass body - soft gradient
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: colorScheme == .dark
+                            ? [
+                                Color(white: 0.22).opacity(0.95),
+                                Color(white: 0.16).opacity(0.90),
+                                Color(white: 0.12).opacity(0.85)
+                            ]
+                            : [
+                                Color.white.opacity(0.95),
+                                Color.white.opacity(0.85),
+                                Color(white: 0.92).opacity(0.9)
+                            ],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: 80
+                    )
+                )
+                .frame(width: 84, height: 84)
+                .blur(radius: 0.5)
+                .overlay {
+                    if colorScheme == .dark {
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.12),
+                                        Color.white.opacity(0.04)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 0.5
+                            )
+                            .frame(width: 84, height: 84)
+                    }
+                }
+        }
+        .shadow(color: colorScheme == .dark ? .clear : .black.opacity(0.12), radius: 20, y: 10)
+        .allowsHitTesting(false)
+    }
+}
+
 struct CopiedButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var solidBackground: Color {
+        colorScheme == .dark
+            ? Color(red: 0.1, green: 0.4, blue: 0.15)
+            : Color.green
+    }
+
+    private var gradientColors: [Color] {
+        colorScheme == .dark
+            ? [Color(red: 0.12, green: 0.5, blue: 0.2), Color(red: 0.08, green: 0.38, blue: 0.12)]
+            : [Color.green.opacity(0.9), Color.green]
+    }
+
+    private var glowColor: Color {
+        colorScheme == .dark
+            ? Color.green.opacity(0.4)
+            : Color.green.opacity(0.5)
+    }
+
+    private var glowRadius: CGFloat {
+        colorScheme == .dark ? 16 : 12
+    }
+
     var body: some View {
         ZStack {
             // Solid background to block glass effect - matches glass body size
             Circle()
-                .fill(Color.green)
+                .fill(solidBackground)
                 .frame(width: 84, height: 84)
 
             // Inner circle with gradient for depth
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [Color.green.opacity(0.9), Color.green],
+                        colors: gradientColors,
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -1242,7 +1314,7 @@ struct CopiedButton: View {
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.white)
         }
-        .shadow(color: .green.opacity(0.5), radius: 12)
+        .shadow(color: glowColor, radius: glowRadius)
     }
 }
 

@@ -3,7 +3,7 @@
 A powerful macOS menu bar app for local speech-to-text transcription using [whisper.cpp](https://github.com/ggerganov/whisper.cpp). Runs entirely offline with downloaded Whisper models.
 
 <p align="center">
-<img src="docs/image.jpg" width="400" /> <img src="docs/image_indicator.jpg" width="400" />
+<img src="docs/screenshot_light.png" width="400" /> <img src="docs/screenshot_dark.png" width="400" />
 </p>
 
 ## Features
