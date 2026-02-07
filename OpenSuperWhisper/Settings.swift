@@ -167,6 +167,12 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var keepMicrophoneWarm: Bool {
+        didSet {
+            AppPreferences.shared.keepMicrophoneWarm = keepMicrophoneWarm
+        }
+    }
+
     // MARK: - Editor Settings
 
     @Published var editorEnabled: Bool {
@@ -275,6 +281,7 @@ class SettingsViewModel: ObservableObject {
         self.useAsianAutocorrect = prefs.useAsianAutocorrect
         self.autoCopyToClipboard = prefs.autoCopyToClipboard
         self.autoPasteAfterCopy = prefs.autoPasteAfterCopy
+        self.keepMicrophoneWarm = prefs.keepMicrophoneWarm
 
         // Editor settings
         self.editorEnabled = prefs.editorEnabled
@@ -1538,6 +1545,18 @@ struct SettingsView: View {
                         }
                         .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
                         .help("Automatically copy transcription to clipboard after recording")
+
+                        Toggle(isOn: $viewModel.keepMicrophoneWarm) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Keep microphone ready")
+                                    .font(Typography.settingsBody)
+                                Text("Keeps audio hardware initialized for instant recording start. No audio is captured while idle.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .toggleStyle(SwitchToggleStyle(tint: Color.accentColor))
+                        .help("Pre-initialize audio hardware to eliminate recording startup delay")
                     }
                 }
                 .padding()

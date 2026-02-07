@@ -18,6 +18,14 @@ class AudioRecorder: NSObject, ObservableObject {
     private var notificationObserver: Any?
     private var microphoneChangeObserver: Any?
 
+    // MARK: - Microphone Warm-Up
+
+    /// Pre-prepared recorder that keeps the audio hardware warm for instant recording start.
+    /// Created via prepareToRecord() which opens hardware without capturing audio.
+    private var warmRecorder: AVAudioRecorder?
+    private var warmRecorderURL: URL?
+    private var warmUpObserver: Any?
+
     // MARK: - Singleton Instance
 
     static let shared = AudioRecorder()
@@ -38,11 +46,15 @@ class AudioRecorder: NSObject, ObservableObject {
         if let observer = microphoneChangeObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = warmUpObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        coolDownMicrophone()
     }
     
     private func setup() {
         updateCanRecordStatus()
-        
+
         notificationObserver = NotificationCenter.default.addObserver(
             forName: .AVCaptureDeviceWasConnected,
             object: nil,
@@ -50,7 +62,7 @@ class AudioRecorder: NSObject, ObservableObject {
         ) { [weak self] _ in
             self?.updateCanRecordStatus()
         }
-        
+
         NotificationCenter.default.addObserver(
             forName: .AVCaptureDeviceWasDisconnected,
             object: nil,
@@ -58,14 +70,42 @@ class AudioRecorder: NSObject, ObservableObject {
         ) { [weak self] _ in
             self?.updateCanRecordStatus()
         }
-        
+
         microphoneChangeObserver = NotificationCenter.default.addObserver(
             forName: .microphoneDidChange,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             self?.updateCanRecordStatus()
+            // Re-warm with new mic if warm-up is enabled
+            self?.reWarmIfEnabled()
         }
+
+        // Listen for warm-up preference changes.
+        // Use DispatchQueue.main.async to avoid exclusive access conflicts:
+        // the UserDefaults.didChangeNotification fires synchronously during the
+        // property setter, so reading the same property in the handler would
+        // conflict with the still-running setter.
+        warmUpObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let shouldBeWarm = AppPreferences.shared.keepMicrophoneWarm
+                let isWarm = self.warmRecorder != nil
+                guard shouldBeWarm != isWarm else { return }
+                if shouldBeWarm && !self.isRecording {
+                    self.warmUpMicrophone()
+                } else if !shouldBeWarm {
+                    self.coolDownMicrophone()
+                }
+            }
+        }
+
+        // Initial warm-up if preference is already enabled
+        reWarmIfEnabled()
     }
     
     private func updateCanRecordStatus() {
@@ -122,45 +162,57 @@ class AudioRecorder: NSObject, ObservableObject {
             print("Cannot start recording - no audio input available")
             return
         }
-        
+
         if isRecording {
             print("stop recording while recording")
             _ = stopRecording()
         }
-        
+
         if AppPreferences.shared.playSoundOnRecordStart {
             playNotificationSound()
         }
-        
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let filename = "\(timestamp).wav"
-        let fileURL = temporaryDirectory.appendingPathComponent(filename)
-        currentRecordingURL = fileURL
-        
-        print("start record file to \(fileURL)")
-        
+
         #if os(macOS)
         if let activeMic = MicrophoneService.shared.getActiveMicrophone() {
             _ = MicrophoneService.shared.setAsSystemDefaultInput(activeMic)
             print("Set system default input to: \(activeMic.displayName)")
         }
         #endif
-        
+
+        // If we have a warm (pre-prepared) recorder, use it for instant start
+        if let warm = warmRecorder, let warmURL = warmRecorderURL {
+            print("Using warm recorder for instant start: \(warmURL)")
+            audioRecorder = warm
+            currentRecordingURL = warmURL
+            warmRecorder = nil
+            warmRecorderURL = nil
+
+            audioRecorder?.record()
+            isRecording = true
+
+            // Start amplitude metering
+            if let recorder = audioRecorder {
+                Task { @MainActor in
+                    AudioMeterService.shared.startMicrophoneMetering(with: recorder)
+                }
+            }
+            print("Recording started instantly (warm microphone)")
+            return
+        }
+
+        // Cold start: create a new recorder
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let filename = "\(timestamp).wav"
+        let fileURL = temporaryDirectory.appendingPathComponent(filename)
+        currentRecordingURL = fileURL
+
+        print("start record file to \(fileURL) (cold start)")
         startRecordingWithRecorder(fileURL: fileURL)
     }
-    
+
     private func startRecordingWithRecorder(fileURL: URL) {
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 16000.0,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false
-        ]
-        
         do {
-            audioRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
+            audioRecorder = try AVAudioRecorder(url: fileURL, settings: recordingSettings)
             audioRecorder?.delegate = self
             audioRecorder?.isMeteringEnabled = true
             audioRecorder?.record()
@@ -182,30 +234,94 @@ class AudioRecorder: NSObject, ObservableObject {
     
     func stopRecording() -> URL? {
         audioRecorder?.stop()
+        audioRecorder = nil
         isRecording = false
-        
+
         if let url = currentRecordingURL,
            let duration = try? AVAudioPlayer(contentsOf: url).duration,
            duration < 1.0
         {
             try? FileManager.default.removeItem(at: url)
             currentRecordingURL = nil
+            reWarmIfEnabled()
             return nil
         }
-        
+
         let url = currentRecordingURL
         currentRecordingURL = nil
+        reWarmIfEnabled()
         return url
     }
-    
+
     func cancelRecording() {
         audioRecorder?.stop()
+        audioRecorder = nil
         isRecording = false
-        
+
         if let url = currentRecordingURL {
             try? FileManager.default.removeItem(at: url)
         }
         currentRecordingURL = nil
+        reWarmIfEnabled()
+    }
+
+    // MARK: - Microphone Warm-Up
+
+    private var recordingSettings: [String: Any] {
+        [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM),
+            AVSampleRateKey: 16000.0,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false
+        ]
+    }
+
+    /// Warm up the microphone by pre-preparing an AVAudioRecorder.
+    /// This opens the audio hardware and allocates buffers without capturing audio.
+    private func warmUpMicrophone() {
+        guard !isRecording else { return }
+
+        // Clean up any existing warm recorder
+        coolDownMicrophone()
+
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let filename = "warm_\(timestamp).wav"
+        let fileURL = temporaryDirectory.appendingPathComponent(filename)
+
+        do {
+            let recorder = try AVAudioRecorder(url: fileURL, settings: recordingSettings)
+            recorder.delegate = self
+            recorder.isMeteringEnabled = true
+            recorder.prepareToRecord()
+            warmRecorder = recorder
+            warmRecorderURL = fileURL
+            print("Microphone warmed up: \(fileURL)")
+        } catch {
+            print("Failed to warm up microphone: \(error)")
+            // Clean up the file if creation partially succeeded
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    /// Release the warm recorder and clean up its temp file.
+    private func coolDownMicrophone() {
+        guard warmRecorder != nil else { return }
+        warmRecorder?.stop()
+        warmRecorder = nil
+        if let url = warmRecorderURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        warmRecorderURL = nil
+        print("Microphone cooled down")
+    }
+
+    /// Re-warm the microphone if the preference is enabled.
+    private func reWarmIfEnabled() {
+        if AppPreferences.shared.keepMicrophoneWarm {
+            warmUpMicrophone()
+        }
     }
     
     func moveTemporaryRecording(from tempURL: URL, to finalURL: URL) throws {

@@ -68,6 +68,9 @@ final class AppPreferences {
     @UserDefault(key: "playSoundOnRecordStart", defaultValue: false)
     var playSoundOnRecordStart: Bool
 
+    @UserDefault(key: "keepMicrophoneWarm", defaultValue: false)
+    var keepMicrophoneWarm: Bool
+
     @UserDefault(key: "autoCopyToClipboard", defaultValue: true)
     var autoCopyToClipboard: Bool
 
