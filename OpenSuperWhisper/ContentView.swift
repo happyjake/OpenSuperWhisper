@@ -245,7 +245,7 @@ struct ContentView: View {
                                             .multilineTextAlignment(.center)
                                             .padding(.horizontal)
 
-                                        if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
+                                        if let shortcutDisplay = currentShortcutDisplayString() {
                                             VStack(spacing: 8) {
                                                 Text("Pro Tip:")
                                                     .font(.subheadline)
@@ -255,7 +255,7 @@ struct ContentView: View {
                                                     Text("Press")
                                                         .font(.subheadline)
                                                         .foregroundColor(.secondary)
-                                                    Text(shortcut.description)
+                                                    Text(shortcutDisplay)
                                                         .font(.system(size: 16, weight: .medium))
                                                         .padding(.horizontal, 6)
                                                         .padding(.vertical, 3)
@@ -307,9 +307,9 @@ struct ContentView: View {
                     .safeAreaInset(edge: .bottom) {
                         HStack(alignment: .center) {
                             // Left: shortcut hint (minimal)
-                            if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecord) {
+                            if let shortcutDisplay = currentShortcutDisplayString() {
                                 HStack(spacing: 4) {
-                                    Text(shortcut.description)
+                                    Text(shortcutDisplay)
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                     Text("mini recorder")

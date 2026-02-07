@@ -246,6 +246,12 @@ class SettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var shortcutType: ShortcutType {
+        didSet {
+            AppPreferences.shared.shortcutType = shortcutType
+        }
+    }
+
     @Published var isAccessibilityPermissionGranted: Bool = false
     private var accessibilityCheckTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -285,6 +291,7 @@ class SettingsViewModel: ObservableObject {
         self.llmModelPath = prefs.llmModelPath
         self.llmTimeoutSeconds = prefs.llmTimeoutSeconds
         self.llmAutoLoadModel = prefs.llmAutoLoadModel
+        self.shortcutType = prefs.shortcutType
 
         // Load language prompts with migration from old initialPrompt
         var loadedPrompts = prefs.languagePrompts
@@ -448,7 +455,6 @@ struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
     @ObservedObject private var modelManager = WhisperModelManager.shared
     @Environment(\.dismiss) var dismiss
-    @State private var isRecordingNewShortcut = false
     @State private var selectedTab: Int = 0
     @State private var previousModelURL: URL?
     @State private var showDownloadError = false
@@ -1515,15 +1521,7 @@ struct SettingsView: View {
                             Text("Toggle record:")
                                 .font(Typography.settingsLabel)
                             Spacer()
-                            KeyboardShortcuts.Recorder("", name: .toggleRecord)
-                                .frame(width: 120)
-                        }
-
-                        if isRecordingNewShortcut {
-                            Text("Press your new shortcut combination...")
-                                .foregroundColor(.secondary)
-                                .font(Typography.settingsBody)
-                                .padding(.vertical, 4)
+                            ShortcutRecorderView(shortcutType: $viewModel.shortcutType)
                         }
 
                         Toggle(isOn: $viewModel.playSoundOnRecordStart) {
@@ -1557,7 +1555,7 @@ struct SettingsView: View {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "1.circle.fill")
                                 .foregroundColor(.accentColor)
-                            Text("Press any key combination to set as the recording shortcut")
+                            Text("Press a key combination, or just press and release modifier keys (e.g., ⌃⌘)")
                                 .font(Typography.settingsBody)
                                 .foregroundColor(.secondary)
                         }
@@ -1573,7 +1571,7 @@ struct SettingsView: View {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "3.circle.fill")
                                 .foregroundColor(.accentColor)
-                            Text("Recommended to use Command (⌘) or Option (⌥) key combinations")
+                            Text("You can use modifier-only shortcuts — Accessibility permission is required for these")
                                 .font(Typography.settingsBody)
                                 .foregroundColor(.secondary)
                         }

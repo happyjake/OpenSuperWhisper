@@ -1,5 +1,10 @@
 import Foundation
 
+enum ShortcutType: String, Codable {
+    case traditional
+    case modifierOnly
+}
+
 @propertyWrapper
 struct UserDefault<T> {
     let key: String
@@ -96,6 +101,19 @@ final class AppPreferences {
                 languagePromptsData = encoded
             }
         }
+    }
+
+    // MARK: - Shortcut Type Settings
+
+    @UserDefault(key: "shortcutType", defaultValue: "traditional")
+    var shortcutTypeRaw: String
+
+    @OptionalUserDefault(key: "modifierShortcutFlags")
+    var modifierShortcutFlags: Int?
+
+    var shortcutType: ShortcutType {
+        get { ShortcutType(rawValue: shortcutTypeRaw) ?? .traditional }
+        set { shortcutTypeRaw = newValue.rawValue }
     }
 
     // MARK: - LLM Post-Processing Settings
